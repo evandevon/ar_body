@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>AR Overlays</title>
+  <meta name="description" content="Track a body with your camera and stick pictures and videos to it. Runs entirely in your browser — nothing is uploaded.">
+  <meta name="theme-color" content="#101418">
+  <link rel="icon" href="assets/sparkle.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <main class="app">
+    <section class="stage" id="stage" aria-label="Camera view">
+      <canvas id="view" role="img" aria-label="Live camera picture with overlays"></canvas>
+      <video id="camera" playsinline muted autoplay></video>
+
+      <div class="splash" id="splash">
+        <img src="assets/sparkle.svg" alt="" width="72" height="72">
+        <h1>AR Overlays</h1>
+        <p>Point the camera at someone and stick pictures and videos to their head, hands, body and feet.</p>
+        <button id="startBtn" class="btn primary big" type="button">Start camera</button>
+        <p class="fine">Everything runs on this device. Nothing from the camera is uploaded or saved unless you press Snapshot or Record.</p>
+        <p class="hint" id="splashHint"></p>
+      </div>
+
+      <div class="status" id="status" role="status" aria-live="polite" hidden></div>
+      <div class="dropzone" id="dropzone" hidden>Drop a picture or video from another tab to add it</div>
+
+      <div class="toolbar" role="toolbar" aria-label="Camera controls">
+        <button class="tool" id="flipBtn" type="button" aria-label="Switch camera" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><path d="M9 13a3 3 0 0 1 5.2-2M15 13a3 3 0 0 1-5.2 2M14 9v2h-2M10 17v-2h2"/></svg>
+          <span class="lbl">Switch</span>
+        </button>
+        <button class="tool" id="snapBtn" type="button" aria-label="Take snapshot">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/></svg>
+          <span class="lbl">Snapshot</span>
+        </button>
+        <button class="tool" id="recordBtn" type="button" aria-label="Start recording">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle class="rec-dot" cx="12" cy="12" r="6"/></svg>
+          <span class="lbl">Record</span>
+        </button>
+        <button class="tool" id="skeletonBtn" type="button" aria-label="Show skeleton" aria-pressed="false" title="Show skeleton (S)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="4.5" r="2"/><path d="M12 7v7M7 9l5 1 5-1M9 21l3-7 3 7"/></svg>
+          <span class="lbl">Skeleton</span>
+        </button>
+        <button class="tool" id="fullBtn" type="button" aria-label="Full screen">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+          <span class="lbl">Full screen</span>
+        </button>
+        <button class="tool" id="panelBtn" type="button" aria-label="Show or hide settings" aria-controls="panel" aria-expanded="true">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+          <span class="lbl">Settings</span>
+        </button>
+      </div>
+    </section>
+
+    <aside class="panel" id="panel" aria-label="Settings">
+      <a class="home-link" href="./">← All tools</a>
+      <section class="group">
+        <h2>Overlays</h2>
+        <form id="urlForm" class="url-row">
+          <label class="sr" for="urlInput">Web address of a picture or video</label>
+          <input id="urlInput" type="url" placeholder="https://… picture or video address" inputmode="url" autocomplete="off" required>
+          <button class="btn primary" type="submit">Add</button>
+        </form>
+        <p class="fine">Use addresses that go straight to the file (ending in .png, .gif, .svg, .mp4, .webm…). You can also drag a picture in from another tab, or paste an address anywhere on the page. Files stored in your GitHub repo work best.</p>
+
+        <p id="emptyMsg" class="empty">No overlays yet.</p>
+        <ul class="cards" id="overlayList" aria-label="Overlays, front-most first"></ul>
+
+        <div class="btn-row">
+          <button class="btn primary" id="copyLinkBtn" type="button">Copy link to this layout</button>
+          <button class="btn danger" id="clearBtn" type="button">Clear all</button>
+        </div>
+        <div class="examples">
+          <span>Examples:</span>
+          <button class="btn small" type="button" data-example="crown">Crown &amp; sparkles</button>
+          <button class="btn small" type="button" data-example="skeleton">Skeleton</button>
+        </div>
+        <p class="fine">The layout is saved in this page’s address as you go. Bookmark or share the link to come back to it.</p>
+      </section>
+
+      <section class="group">
+        <h2>Camera</h2>
+        <label class="row"><span>Camera</span><select id="cameraSelect" aria-label="Choose camera"></select></label>
+        <label class="check"><input type="checkbox" id="mirror" checked> Mirror (like a selfie)</label>
+      </section>
+
+      <section class="group">
+        <h2>Tracking</h2>
+        <label class="row"><span>Accuracy</span>
+          <select id="model">
+            <option value="lite" selected>Fast (best for laptops/tablets)</option>
+            <option value="full">Balanced</option>
+            <option value="heavy">Most accurate (slow)</option>
+          </select>
+        </label>
+        <label class="row"><span>People</span>
+          <select id="people">
+            <option value="1" selected>1 person</option>
+            <option value="2">2 people</option>
+            <option value="3">3 people</option>
+            <option value="4">4 people</option>
+          </select>
+        </label>
+        <div class="row slider">
+          <label for="smoothing">Smoothing</label>
+          <input type="range" id="smoothing" min="0" max="1" step="0.05" value="0.5">
+        </div>
+        <label class="check"><input type="checkbox" id="skeleton"> Show skeleton <span class="kbd">S</span></label>
+        <label class="check"><input type="checkbox" id="anchorsToggle"> Show sticking points</label>
+      </section>
+
+      <p class="fine credit">Body tracking by Google MediaPipe, running in your browser.</p>
+    </aside>
+  </main>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

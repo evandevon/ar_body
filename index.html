@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>AR Body</title>
+  <meta name="description" content="Camera-based body tracking tools for the classroom. Runs in the browser — nothing is uploaded.">
+  <meta name="theme-color" content="#101418">
+  <link rel="icon" href="assets/sparkle.svg" type="image/svg+xml">
+  <script>
+    // Old shared overlay links (index.html#l=…) now live on overlays.html
+    if (/[#&]l=/.test(location.hash)) location.replace('overlays.html' + location.hash);
+  </script>
+  <style>
+    :root { --bg: #101418; --card: #1a2128; --line: #2c3742; --text: #eef2f5; --muted: #9aa8b4; --accent: #ffc83d; color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100dvh; background: radial-gradient(circle at 50% 0, #26313b, var(--bg) 60%); color: var(--text);
+      font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; align-items: center;
+      padding: max(24px, env(safe-area-inset-top)) 16px 32px; }
+    header { text-align: center; max-width: 640px; margin: 12px 0 24px; }
+    header img { width: 64px; height: 64px; }
+    h1 { margin: 6px 0; font-size: clamp(2rem, 7vw, 3rem); letter-spacing: -.02em; }
+    header p { color: var(--muted); margin: 0; }
+    .cards { display: grid; gap: 14px; width: min(920px, 100%); grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+    .card { display: flex; flex-direction: column; gap: 6px; padding: 20px; border-radius: 18px; background: var(--card); border: 1px solid var(--line);
+      color: inherit; text-decoration: none; transition: transform .15s, border-color .15s; min-height: 170px; }
+    a.card:hover, a.card:focus-visible { border-color: var(--accent); transform: translateY(-2px); outline: none; }
+    .card .icon { font-size: 34px; }
+    .card h2 { margin: 4px 0 0; font-size: 1.3rem; }
+    .card p { margin: 0; color: var(--muted); }
+    .card.soon { opacity: .55; }
+    .tag { align-self: flex-start; font-size: 12px; border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; color: var(--muted); }
+    footer { margin-top: 28px; color: var(--muted); font-size: 13px; text-align: center; max-width: 560px; }
+    @media (prefers-reduced-motion: reduce) { .card { transition: none; } }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="assets/sparkle.svg" alt="">
+    <h1>AR Body</h1>
+    <p>Camera tools that track a body and bring pictures to life.</p>
+  </header>
+  <main class="cards">
+    <a class="card" href="animate.html">
+      <span class="icon" aria-hidden="true">🎨</span>
+      <h2>Animate my drawing</h2>
+      <p>Photograph a drawn character, then move — and it copies you. Record a video to share.</p>
+      <span class="tag">Great on phones</span>
+    </a>
+    <a class="card" href="overlays.html">
+      <span class="icon" aria-hidden="true">👑</span>
+      <h2>AR Overlays</h2>
+      <p>Stick pictures and videos to a head, hands, bones and body. Share a setup as a link.</p>
+    </a>
+    <div class="card soon" aria-disabled="true">
+      <span class="icon" aria-hidden="true">🫀</span>
+      <h2>Body Explorer</h2>
+      <p>See where organs and bones are, and how they work together as you move.</p>
+      <span class="tag">Coming soon</span>
+    </div>
+  </main>
+  <footer>Everything runs on this device. The camera picture is never uploaded or saved unless you record or take a snapshot.</footer>
+</body>
+</html>
