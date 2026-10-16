@@ -1,0 +1,22 @@
+/* Loading card (js/core/progress.js) — shared by every page */
+.loadstack {
+  position: fixed; left: 50%; top: max(70px, calc(env(safe-area-inset-top) + 62px)); transform: translateX(-50%);
+  z-index: 30; width: min(92vw, 380px); display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+}
+.loadcard {
+  padding: 12px 14px;
+  background: rgba(23, 29, 35, .96); color: #eef2f5; border: 1px solid #2c3742; border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.45); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.loadcard-row { display: flex; justify-content: space-between; gap: 10px; font-weight: 600; }
+.loadcard-pct { font-variant-numeric: tabular-nums; color: #ffc83d; }
+.loadcard-bar { height: 8px; margin-top: 8px; border-radius: 4px; background: #2c3742; overflow: hidden; }
+.loadcard-bar span { display: block; height: 100%; width: 0; background: #ffc83d; border-radius: 4px; transition: width .2s ease-out; }
+.loadcard-sub { margin-top: 6px; font-size: 12px; color: #9aa8b4; font-variant-numeric: tabular-nums; }
+.loadcard-sub:empty { display: none; }
+.loadcard.indeterminate .loadcard-bar span { width: 35%; animation: loadslide 1.1s ease-in-out infinite; }
+@keyframes loadslide { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+@media (prefers-reduced-motion: reduce) {
+  .loadcard-bar span { transition: none; }
+  .loadcard.indeterminate .loadcard-bar span { animation: none; width: 100%; opacity: .5; }
+}

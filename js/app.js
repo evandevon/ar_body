@@ -1,5 +1,9 @@
 import { ANCHORS, ANCHOR_BY_ID, computeAnchors, angleDiff } from './body.js?v=10e5e686';
 import { openCamera, stopStream, cameraErrorMessage, deviceList, waitForFrames } from './core/camera.js?v=2afbfead';
+import { createProgress } from './core/progress.js?v=4da3a204';
+
+const trackerProgress = createProgress();
+const mediaProgress = createProgress();
 
 // The body tracker downloads from the internet, so it's loaded separately: if a network blocks
 // it, the camera and overlays still work.
@@ -51,10 +55,17 @@ function setStatus(msg, { sticky = false, error = false } = {}) {
 let modelToken = 0;
 async function loadModel() {
   const token = ++modelToken;
-  setStatus('Loading body tracker…', { sticky: true });
+  setStatus('');
+  trackerProgress.set('Loading body tracker…', 0);
   try {
-    tracker ??= await import('./core/tracker.js?v=7b94bb29');
-    const lm = await tracker.createPoseTracker({ model: state.model, numPoses: state.numPoses });
+    tracker ??= await import('./core/tracker.js?v=96d3e1a2');
+    const lm = await tracker.createPoseTracker({
+      model: state.model, numPoses: state.numPoses,
+      onProgress: p => p.stage === 'starting'
+        ? trackerProgress.set('Starting body tracker…', 1, 'Almost ready')
+        : trackerProgress.bytes('Downloading body tracker…', p.loaded, p.total),
+    });
+    trackerProgress.done();
     if (token !== modelToken) { lm.close(); return; }
     state.landmarker?.close();
     state.landmarker = lm;
@@ -64,6 +75,7 @@ async function loadModel() {
   } catch (e) {
     console.error(e);
     if (token !== modelToken) return;
+    trackerProgress.done();
     state.trackerMsg = tracker ? tracker.trackerErrorMessage(e) : 'Body tracking couldn’t load. The camera still works.';
     setStatus(state.trackerMsg, { sticky: true, error: true });
   }
@@ -179,6 +191,7 @@ async function loadGif(src) {
     const frames = [];
     let total = 0;
     for (let i = 0; i < n; i++) {
+      if (n > 8) mediaProgress.set('Preparing animated GIF…', i / n, `Frame ${i + 1} of ${n}`);
       const { image } = await dec.decode({ frameIndex: i });
       const bmp = await createImageBitmap(image);
       const dur = Math.max(20, (image.duration ?? 100000) / 1000);
@@ -187,9 +200,11 @@ async function loadGif(src) {
       total += dur;
     }
     dec.close();
+    mediaProgress.done();
     if (!frames.length) return loadImage(src);
     return { frames, total, w: frames[0].bmp.width, h: frames[0].bmp.height };
   } catch (e) {
+    mediaProgress.done();
     console.warn('GIF decode failed, using first frame', e);
     return loadImage(src);
   }
@@ -483,7 +498,11 @@ async function applyLayout(data) {
     if (['lite', 'full', 'heavy'].includes(data.q) && data.q !== state.model) {
       state.model = data.q; $('#model').value = data.q; if (tracker) loadModel();
     }
-    for (const e of Array.isArray(data.o) ? data.o : []) {
+    const list = Array.isArray(data.o) ? data.o : [];
+    let done = 0;
+    for (const e of list) {
+      if (list.length > 2) mediaProgress.set('Loading overlays…', done / list.length, `${done} of ${list.length}`);
+      done++;
       if (typeof e?.u !== 'string' || !/^https?:\/\//i.test(e.u)) continue;
       const settings = {};
       for (const [sk, val] of Object.entries(e)) {
@@ -494,6 +513,7 @@ async function applyLayout(data) {
       await addOverlay({ src: e.u, settings });
     }
   } finally {
+    mediaProgress.done();
     applying = false;
   }
 }

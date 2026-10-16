@@ -1,9 +1,13 @@
 import { findCharacter, paperMap, applyEdits, cutOut, maskFromAlpha } from './cutout.js?v=af729520';
-import { JOINTS, LINKS, guessJoints, buildRig, Puppet, readPerformer } from './rig.js?v=bc1498b1';
+import { JOINTS, LINKS, guessJoints, buildRig, Puppet, readPerformer } from './rig.js?v=3734807e';
 import { PuppetRenderer } from './renderer.js?v=b2e675e8';
 import { SCENES, drawCover } from './backgrounds.js?v=b50d8b94';
 import { saveCharacter, listCharacters, deleteCharacter, getCharacter } from './storage.js?v=53955991';
 import { openCamera, stopStream, cameraErrorMessage, deviceList, waitForFrames, openMic, micErrorMessage, levelMeter } from '../core/camera.js?v=2afbfead';
+import { createProgress, nextPaint } from '../core/progress.js?v=4da3a204';
+
+const work = createProgress({ delay: 150 }); // photo processing, preparing the character
+const trackerProg = createProgress();       // body tracker download
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -20,7 +24,7 @@ const S = {
   maskVersion: 0,
   undo: [],
   cut: null,                // { canvas, w, h, mask }
-  joints: null, jointsVersion: -1,
+  joints: null, jointsEdit: 0, cutVersion: -1, rigVersion: -1,
   rig: null, puppet: null,
   charId: null,
   bgImage: null,
@@ -60,8 +64,10 @@ async function show(step) {
   $$('.steps li').forEach((li, i) => {
     li.classList.toggle('current', i === at);
     li.classList.toggle('done', i < at);
-    if (i === at) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current');
+    const b = li.querySelector('button');
+    if (i === at) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
   });
+  syncStepButtons();
   if (prev === 'perform' && step !== 'perform') leavePerform(step);
   if (prev === 'scene' && step !== 'perform' && step !== 'scene') releaseMic();
   if (step === 'drawing') renderSaved();
@@ -72,9 +78,65 @@ async function show(step) {
 }
 $$('[data-go]').forEach(b => (b.onclick = () => {
   const to = b.dataset.go;
-  if (to === 'cutout' && !S.photo) return show('drawing'); // reopened characters have no photo to re-cut
-  show(to);
+  if (to === 'cutout' && !S.photo) return goTo('drawing'); // reopened characters have no photo to re-cut
+  goTo(to);
 }));
+
+// Which steps can be reached yet (a step needs the ones before it)
+function canReach(step) {
+  if (step === 'drawing') return true;
+  if (step === 'cutout') return !!S.photo;
+  return !!(S.photo || S.cut);
+}
+function syncStepButtons() {
+  for (const b of $$('.steps button')) {
+    const ok = canReach(b.dataset.goto);
+    b.disabled = !ok;
+    b.title = ok ? '' : 'Start with a drawing first';
+  }
+}
+$$('.steps button').forEach(b => (b.onclick = () => goTo(b.dataset.goto)));
+
+/** Moves to any step, doing whatever the skipped Next buttons would have done. */
+let going = false;
+async function goTo(step) {
+  if (going || step === S.step || !canReach(step)) return;
+  going = true;
+  try {
+    const i = ORDER.indexOf(step);
+    if (i >= ORDER.indexOf('joints') && !ensureCut()) return;
+    if (i >= ORDER.indexOf('scene') && !(await ensureRig())) return;
+    await show(step);
+  } finally { going = false; }
+}
+
+// Cut-out from the current mask (redone only if the mask changed since last time)
+function ensureCut() {
+  if (!S.photo) return !!S.cut; // a reopened character: already cut out
+  if (S.cut && S.cutVersion === S.maskVersion) return true;
+  const cut = cutOut(S.photo.data, S.mask, S.paper);
+  if (!cut || cut.width * cut.height < 400) { toast('No character found — try painting it in with “Add”.', { error: true }); return false; }
+  const canvas = document.createElement('canvas');
+  canvas.width = cut.width; canvas.height = cut.height;
+  const id = new ImageData(cut.data, cut.width, cut.height);
+  canvas.getContext('2d').putImageData(id, 0, 0);
+  S.cut = { canvas, w: cut.width, h: cut.height, mask: maskFromAlpha(id) };
+  S.cutVersion = S.maskVersion;
+  S.joints = guessJoints(S.cut.mask, S.cut.w, S.cut.h);
+  S.jointsEdit++;
+  return true;
+}
+
+// The bendable character, rebuilt only if the dots moved since last time
+async function ensureRig() {
+  if (S.rig && S.rigVersion === S.jointsEdit) return true;
+  work.set('Getting your character ready…', 0.3);
+  await nextPaint();
+  try { await prepareRig(true); }
+  finally { work.done(); }
+  S.rigVersion = S.jointsEdit;
+  return !!S.rig;
+}
 
 function fitCanvas(c, w, h) { if (c.width !== w || c.height !== h) { c.width = w; c.height = h; } }
 
@@ -93,8 +155,11 @@ new ResizeObserver(fitAll).observe(document.body);
 // ------------------------------------------------------------------ 1. drawing
 async function loadPhoto(src) {
   let img;
+  work.set('Opening picture…', 0.1);
   try { img = await loadImg(src); }
-  catch { toast('That picture couldn’t be opened.', { error: true }); return; }
+  catch { work.done(); toast('That picture couldn’t be opened.', { error: true }); return; }
+  work.set('Finding your character…', 0.35);
+  await nextPaint();
   const s = Math.min(1, MAX_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
   const w = Math.round(img.naturalWidth * s), h = Math.round(img.naturalHeight * s);
   const canvas = document.createElement('canvas');
@@ -104,13 +169,17 @@ async function loadPhoto(src) {
   const data = g.getImageData(0, 0, w, h);
   S.photo = { canvas, data, w, h };
   S.paper = paperMap(data);
+  work.set('Finding your character…', 0.6);
+  await nextPaint();
   S.auto = findCharacter(data, { sensitivity: +$('#sensitivity').value, paper: S.paper }).mask;
+  work.set('Finding your character…', 1);
   S.add = new Uint8Array(w * h);
   S.cutBaseVersion = -1;
   S.erase = new Uint8Array(w * h);
   S.undo = [];
   updateMask();
-  S.joints = null; S.charId = null; S.jointsVersion = -1;
+  S.joints = null; S.charId = null; S.cut = null; S.rig = null; S.cutVersion = -1;
+  work.done();
   show('cutout');
 }
 for (const id of ['#photoInput', '#fileInput']) {
@@ -236,7 +305,11 @@ async function openSaved(id) {
   S.joints = c.joints;
   S.photo = null;
   S.charId = c.id;
-  await prepareRig(false);
+  S.jointsEdit++;
+  work.set('Getting your character ready…', 0.4);
+  await nextPaint();
+  try { await prepareRig(false); } finally { work.done(); }
+  S.rigVersion = S.jointsEdit;
   show('scene');
 }
 
@@ -381,20 +454,7 @@ $('#sensitivity').oninput = e => {
   }, 120);
 };
 
-$('#cutNext').onclick = () => {
-  const cut = cutOut(S.photo.data, S.mask, S.paper);
-  if (!cut || cut.width * cut.height < 400) { toast('No character found — try painting it in with “Add”.', { error: true }); return; }
-  const canvas = document.createElement('canvas');
-  canvas.width = cut.width; canvas.height = cut.height;
-  const id = new ImageData(cut.data, cut.width, cut.height);
-  canvas.getContext('2d').putImageData(id, 0, 0);
-  S.cut = { canvas, w: cut.width, h: cut.height, mask: maskFromAlpha(id) };
-  if (!S.joints || S.jointsVersion !== S.maskVersion) {
-    S.joints = guessJoints(S.cut.mask, S.cut.w, S.cut.h);
-    S.jointsVersion = S.maskVersion;
-  }
-  show('joints');
-};
+$('#cutNext').onclick = () => goTo('joints');
 
 // ------------------------------------------------------------------ 3. joints
 const SIDE_COLOUR = { l: '#3d9bff', r: '#ff9a3c', c: '#ffffff' };
@@ -446,6 +506,7 @@ function renderJoints() {
   c.addEventListener('pointermove', e => {
     if (!drag) return;
     const p = canvasPoint(c, e);
+    S.jointsEdit++;
     S.joints[drag.id] = { x: Math.max(0, Math.min(c.width, p.x + drag.dx)), y: Math.max(0, Math.min(c.height, p.y + drag.dy)) };
     renderJoints();
   });
@@ -461,6 +522,7 @@ function renderJoints() {
       selected = ids[(i + (e.key === ']' ? 1 : ids.length - 1)) % ids.length] ?? ids[0];
     } else if (selected && e.key.startsWith('Arrow')) {
       const step = e.shiftKey ? 10 : 2, p = S.joints[selected];
+      S.jointsEdit++;
       S.joints[selected] = { x: p.x + (e.key === 'ArrowRight' ? step : e.key === 'ArrowLeft' ? -step : 0), y: p.y + (e.key === 'ArrowDown' ? step : e.key === 'ArrowUp' ? -step : 0) };
     } else return;
     e.preventDefault();
@@ -472,7 +534,7 @@ function describeSelected() {
   const jt = JOINTS.find(j => j.id === selected);
   $('#jointHint').textContent = jt ? `${jt.label}${sideWord[jt.side] ? ` (${sideWord[jt.side]} side)` : ''}` : '';
 }
-$('#resetDots').onclick = () => { S.joints = guessJoints(S.cut.mask, S.cut.w, S.cut.h); renderJoints(); };
+$('#resetDots').onclick = () => { S.joints = guessJoints(S.cut.mask, S.cut.w, S.cut.h); S.jointsEdit++; renderJoints(); };
 $('#jointCanvas').setAttribute('aria-description', 'Drag the dots, or press [ and ] to choose a dot and arrow keys to move it.');
 window.addEventListener('resize', () => { if (S.step === 'joints') renderJoints(); });
 
@@ -498,7 +560,7 @@ async function prepareRig(save = true) {
     await saveCharacter({ id: S.charId, image: await toBlob(S.cut.canvas), thumb: await toBlob(thumb), joints: S.joints });
   } catch (e) { console.warn('Could not save character', e); }
 }
-$('#jointsNext').onclick = async () => { await prepareRig(true); show('scene'); };
+$('#jointsNext').onclick = () => goTo('scene');
 
 // ------------------------------------------------------------------ drawing the stage
 function stageSize() { return STAGE[settings.shape] || STAGE.landscape; }
@@ -662,6 +724,7 @@ function enterScene() {
   syncSoundUI();
   cameras.refresh();
   if (settings.sound) ensureMic();
+  loadTracker(); // get it downloading now, so it's ready when performing starts
   S.puppet = new Puppet(S.rig);
   const restPose = S.puppet.pose();
   cancelAnimationFrame(previewRAF);
@@ -675,7 +738,7 @@ function enterScene() {
   };
   previewRAF = requestAnimationFrame(loop);
 }
-$('#sceneNext').onclick = () => show('perform');
+$('#sceneNext').onclick = () => goTo('perform');
 
 // ------------------------------------------------------------------ 5. perform
 const cam = $('#camera');
@@ -736,13 +799,20 @@ async function loadTracker() {
   if (S.tracker) return;
   S.trackerLoading ??= (async () => {
     try {
-      tracking ??= await import('../core/tracker.js?v=7b94bb29');
-      if (!$('#performHint').dataset.sticky) setHint('Loading body tracker…');
-      S.tracker = await tracking.createPoseTracker({ model: 'lite' });
+      trackerProg.set('Loading body tracker…', 0);
+      tracking ??= await import('../core/tracker.js?v=96d3e1a2');
+      S.tracker = await tracking.createPoseTracker({
+        model: 'lite',
+        onProgress: p => p.stage === 'starting'
+          ? trackerProg.set('Starting body tracker…', 1, 'Almost ready')
+          : trackerProg.bytes('Downloading body tracker…', p.loaded, p.total),
+      });
+      trackerProg.done();
       S.trackerError = null;
-      if (!$('#performHint').dataset.sticky) setHint('');
+      if (S.step === 'perform' && !$('#performHint').dataset.sticky) setHint('');
     } catch (e) {
       console.error(e);
+      trackerProg.done();
       S.trackerError = e;
       setHint(tracking ? tracking.trackerErrorMessage(e) : 'Body tracking couldn’t load. The camera still works.', true);
       S.trackerLoading = null;

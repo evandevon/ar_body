@@ -233,6 +233,26 @@ export function buildRig(mask, w, h, joints) {
     for (let k = 0; k < K; k++) bW[i * K + k] /= sum;
   }
 
+  // Drawing order: triangles are drawn back-to-front, so sort them by body part —
+  // legs at the back, then body, then head, then arms in front (so a waving arm crosses
+  // over the body and face instead of disappearing behind them).
+  const LAYER = { lThigh: 0, lShin: 0, rThigh: 0, rShin: 0, spine: 1, lClav: 1, rClav: 1, lPelvis: 1, rPelvis: 1, head: 2, lUpper: 3, lFore: 3, rUpper: 3, rFore: 3 };
+  const triLayer = [];
+  const sum = new Float32Array(nb);
+  for (let t = 0; t < tris.length; t += 3) {
+    sum.fill(0);
+    for (let k = 0; k < 3; k++) {
+      const v = tris[t + k];
+      for (let j = 0; j < K; j++) sum[bIdx[v * K + j]] += bW[v * K + j];
+    }
+    let best = 0;
+    for (let bi = 1; bi < nb; bi++) if (sum[bi] > sum[best]) best = bi;
+    triLayer.push(LAYER[BONES[best][0]]);
+  }
+  const order = [...triLayer.keys()].sort((x, y) => triLayer[x] - triLayer[y] || x - y);
+  const sorted = new Array(tris.length);
+  order.forEach((ti, o) => { sorted[o * 3] = tris[ti * 3]; sorted[o * 3 + 1] = tris[ti * 3 + 1]; sorted[o * 3 + 2] = tris[ti * 3 + 2]; });
+
   // rest angles of each bone in the drawing
   const restAngle = {};
   for (const [id, f, t] of BONES) restAngle[id] = ang(J[f], J[t]);
@@ -241,7 +261,7 @@ export function buildRig(mask, w, h, joints) {
 
   const ys = joints.lFoot.y > joints.rFoot.y ? joints.lFoot.y : joints.rFoot.y;
   return {
-    w, h, step, rest, uv, indices: new Uint32Array(tris), weights: { idx: bIdx, w: bW, K },
+    w, h, step, rest, uv, indices: new Uint32Array(sorted), weights: { idx: bIdx, w: bW, K },
     joints: J, restAngle,
     feetY: ys,
     torsoLen: dist(J.root, J.neck),

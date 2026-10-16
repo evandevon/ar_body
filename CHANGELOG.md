@@ -1,5 +1,11 @@
 # Changelog
 
+## v7
+- Progress bars with percentages for anything slow: downloading the body tracker (Animate starts it early, on the Background step), finding the character in a photo, preparing the character, animated GIFs and shared layouts in AR Overlays.
+- Animate: the numbered steps at the top are now buttons — jump to any step once there's a drawing.
+- Animate: "Scene" is now called "Background".
+- Animate: the character's arms are drawn in front of the body and head.
+
 ## v6
 - Body tracking is bundled with the site (`vendor/mediapipe/`, Apache-2.0) and model files can be added to `models/`, so it works without outside servers.
 - Animate: **Take a photo** on a computer now opens a live webcam view (camera list, rotate for document cameras). Phones still use the phone's camera app.

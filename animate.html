@@ -6,20 +6,21 @@
   <title>Animate my drawing</title>
   <meta name="description" content="Bring a drawing to life: the camera copies a real person's movements onto the drawn character. Runs in the browser — nothing is uploaded.">
   <meta name="theme-color" content="#101418">
-  <meta name="version" content="v6">
+  <meta name="version" content="v7">
   <script src="js/core/failsafe.js?v=5d27624d"></script>
   <link rel="icon" href="assets/sparkle.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="css/animate.css?v=f868f422">
+  <link rel="stylesheet" href="css/progress.css?v=c68c0312">
+  <link rel="stylesheet" href="css/animate.css?v=6a093f1b">
 </head>
 <body>
   <header class="topbar">
     <a class="home" href="./" aria-label="Home">←</a>
     <ol class="steps" aria-label="Steps">
-      <li data-step="drawing">Drawing</li>
-      <li data-step="cutout">Cut out</li>
-      <li data-step="joints">Joints</li>
-      <li data-step="scene">Scene</li>
-      <li data-step="perform">Perform</li>
+      <li data-step="drawing"><button type="button" data-goto="drawing">Drawing</button></li>
+      <li data-step="cutout"><button type="button" data-goto="cutout">Cut out</button></li>
+      <li data-step="joints"><button type="button" data-goto="joints">Joints</button></li>
+      <li data-step="scene"><button type="button" data-goto="scene">Background</button></li>
+      <li data-step="perform"><button type="button" data-goto="perform">Perform</button></li>
     </ol>
   </header>
 
@@ -75,10 +76,10 @@
       <nav class="stepnav"><button class="btn" data-go="cutout" type="button">Back</button><button class="btn primary" id="jointsNext" type="button">Next</button></nav>
     </section>
 
-    <!-- 4. scene -->
+    <!-- 4. background (internally "scene") -->
     <section class="step" id="step-scene" data-step="scene" hidden>
       <div class="scene-layout">
-        <div class="work preview"><canvas id="previewCanvas" aria-label="Preview of the scene"></canvas></div>
+        <div class="work preview"><canvas id="previewCanvas" aria-label="Preview of the background"></canvas></div>
         <div class="options">
           <h2>Background</h2>
           <div class="tiles" id="sceneTiles" role="radiogroup" aria-label="Background"></div>
@@ -132,7 +133,7 @@
         <div class="rec-time" id="recTime" hidden></div>
       </div>
       <div class="perform-bar">
-        <button class="round" type="button" data-go="scene" aria-label="Back to scene settings">⚙</button>
+        <button class="round" type="button" data-go="scene" aria-label="Back to background settings">⚙</button>
         <button class="round" type="button" id="flipCam" aria-label="Next camera">⟲</button>
         <label class="cam-pick"><span class="sr">Camera</span><select id="camSelect" aria-label="Camera"></select></label>
         <button class="rec" type="button" id="recBtn" aria-label="Start recording"><span></span></button>
@@ -178,6 +179,6 @@
   <video id="photoVideo" playsinline muted autoplay class="offscreen"></video>
   <canvas id="glCanvas" class="offscreen"></canvas>
 
-  <script type="module" src="js/animate/main.js?v=b1ade905"></script>
+  <script type="module" src="js/animate/main.js?v=58d941e2"></script>
 </body>
 </html>

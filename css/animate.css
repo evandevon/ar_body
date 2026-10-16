@@ -37,13 +37,16 @@ h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: v
 .home { color: var(--text); text-decoration: none; font-size: 22px; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 10px; }
 .home:hover { background: rgba(255,255,255,.08); }
 .steps { list-style: none; display: flex; gap: 4px; margin: 0; padding: 0; overflow-x: auto; flex: 1; }
-.steps li {
-  font-size: 13px; padding: 6px 10px; border-radius: 999px; color: var(--muted); white-space: nowrap;
-  counter-increment: s;
+.steps li { counter-increment: s; }
+.steps button {
+  font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 999px; border: 1px solid transparent;
+  background: none; color: var(--muted); white-space: nowrap; cursor: pointer; min-height: 32px;
 }
-.steps li::before { content: counter(s) " "; font-weight: 700; }
-.steps li.done { color: var(--text); }
-.steps li.current { background: var(--accent); color: var(--accent-ink); font-weight: 650; }
+.steps button::before { content: counter(s) " "; font-weight: 700; }
+.steps button:hover:not(:disabled) { background: rgba(255,255,255,.08); color: var(--text); }
+.steps button:disabled { opacity: .4; cursor: default; }
+.steps li.done button { color: var(--text); }
+.steps li.current button, .steps li.current button:hover:not(:disabled) { background: var(--accent); color: var(--accent-ink); font-weight: 650; }
 
 /* ---------- steps */
 main { flex: 1; min-height: 0; display: flex; }
@@ -158,8 +161,8 @@ input[type="range"] { accent-color: var(--accent); }
 
 @media (max-width: 760px) {
   .scene-layout { grid-template-columns: 1fr; grid-template-rows: minmax(160px, 38%) 1fr; }
-  .steps li:not(.current) { font-size: 0; padding: 6px; }
-  .steps li:not(.current)::before { font-size: 13px; }
+  .steps li:not(.current) button { font-size: 0; padding: 6px 9px; }
+  .steps li:not(.current) button::before { font-size: 13px; }
 }
 @media (prefers-reduced-motion: reduce) { .rec span { transition: none; } }
 
