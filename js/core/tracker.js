@@ -1,14 +1,35 @@
-// Shared camera + body tracker helpers.
-import { FilesetResolver, PoseLandmarker } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.1.1/vision_bundle.mjs';
-export { PoseLandmarker };
+// Loads Google's MediaPipe body tracker. Loaded only when needed, and from a second source if
+// the first is blocked, so a blocked network can't stop the camera from working.
 
-const WASM_PATH = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.1.1/wasm';
+const VERSION = '1.1.1';
+const SOURCES = [
+  `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VERSION}`,
+  `https://unpkg.com/@mediapipe/tasks-vision@${VERSION}`,
+];
 const MODEL_URL = name =>
   `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_${name}/float16/latest/pose_landmarker_${name}.task`;
 
-let vision;
+let lib; // { FilesetResolver, PoseLandmarker, vision }
+
+async function loadLibrary() {
+  if (lib) return lib;
+  let lastErr;
+  for (const base of SOURCES) {
+    try {
+      const m = await import(`${base}/vision_bundle.mjs`);
+      const vision = await m.FilesetResolver.forVisionTasks(`${base}/wasm`);
+      lib = { ...m, vision };
+      return lib;
+    } catch (e) { lastErr = e; console.warn('Tracker source failed:', base, e); }
+  }
+  throw Object.assign(new Error('blocked'), { code: 'library', cause: lastErr });
+}
+
+/** Lines between body points, for drawing a skeleton (empty until the tracker has loaded). */
+export const poseConnections = () => lib?.PoseLandmarker.POSE_CONNECTIONS ?? [];
+
 export async function createPoseTracker({ model = 'lite', numPoses = 1 } = {}) {
-  vision ??= await FilesetResolver.forVisionTasks(WASM_PATH);
+  const { PoseLandmarker, vision } = await loadLibrary();
   const opts = delegate => ({
     baseOptions: { modelAssetPath: MODEL_URL(model), delegate },
     runningMode: 'VIDEO',
@@ -17,28 +38,16 @@ export async function createPoseTracker({ model = 'lite', numPoses = 1 } = {}) {
     minPosePresenceConfidence: 0.5,
     minTrackingConfidence: 0.5,
   });
-  try { return await PoseLandmarker.createFromOptions(vision, opts('GPU')); }
-  catch (e) { console.warn('GPU unavailable, using CPU', e); return PoseLandmarker.createFromOptions(vision, opts('CPU')); }
+  try {
+    try { return await PoseLandmarker.createFromOptions(vision, opts('GPU')); }
+    catch (e) { console.warn('GPU unavailable, using CPU', e); return await PoseLandmarker.createFromOptions(vision, opts('CPU')); }
+  } catch (e) {
+    throw Object.assign(new Error('model'), { code: 'model', cause: e });
+  }
 }
 
-export const isPhone = () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.userAgent));
-
-/** Starts a camera. facing: 'user' | 'environment'. Returns { stream, facing }. */
-export async function openCamera(video, { facing = 'user', deviceId = '' } = {}) {
-  if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) throw Object.assign(new Error('insecure'), { code: 'insecure' });
-  const v = { width: { ideal: 1280 }, height: { ideal: 720 } };
-  if (deviceId) v.deviceId = { exact: deviceId }; else v.facingMode = facing;
-  const stream = await navigator.mediaDevices.getUserMedia({ video: v, audio: false });
-  video.srcObject = stream;
-  video.muted = true; video.playsInline = true;
-  await video.play().catch(() => {});
-  const s = stream.getVideoTracks()[0].getSettings();
-  return { stream, facing: s.facingMode || facing };
-}
-
-export function cameraErrorMessage(e) {
-  if (e.code === 'insecure') return 'The camera only works on https:// pages (like GitHub Pages) or localhost.';
-  if (e.name === 'NotAllowedError') return 'Camera permission was blocked. Allow it in the browser settings and try again.';
-  if (e.name === 'NotFoundError' || e.name === 'OverconstrainedError') return 'No camera was found.';
-  return `Camera error: ${e.message}`;
+export function trackerErrorMessage(e) {
+  if (e?.code === 'library') return 'Body tracking couldn’t load — this network may block cdn.jsdelivr.net and unpkg.com. The camera still works; ask IT to allow one of them.';
+  if (e?.code === 'model') return 'Body tracking couldn’t download its model — this network may block storage.googleapis.com. The camera still works.';
+  return 'Body tracking couldn’t start on this device.';
 }

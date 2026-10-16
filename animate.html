@@ -54,7 +54,7 @@
           <button type="button" class="seg-btn" id="addBrush" aria-pressed="true">+ Add</button>
           <button type="button" class="seg-btn" id="eraseBrush" aria-pressed="false">− Erase</button>
         </div>
-        <label class="mini">Brush <input type="range" id="brushSize" min="4" max="60" value="18"></label>
+        <label class="mini">Brush <input type="range" id="brushSize" min="6" max="80" value="28"></label>
         <button type="button" class="btn" id="undoBtn">Undo</button>
         <label class="mini">Faint lines <input type="range" id="sensitivity" min="0" max="1" step="0.05" value="0.5"></label>
       </div>
@@ -81,6 +81,11 @@
           <div class="tiles" id="sceneTiles" role="radiogroup" aria-label="Background"></div>
           <label class="row" id="colourRow" hidden>Colour <input type="color" id="bgColour" value="#ffd9e8"></label>
           <label class="btn file" id="pictureRow" hidden><input type="file" id="bgPicture" accept="image/*">Choose a background picture</label>
+          <p class="fine note" id="bgNote" hidden></p>
+
+          <h2>Camera</h2>
+          <label class="row"><span class="sr">Camera</span><select id="camSelectScene" aria-label="Camera"></select></label>
+          <p class="fine">Plug in a webcam or document camera and it appears here.</p>
 
           <h2>Camera in the corner</h2>
           <div class="seg" role="radiogroup" aria-label="Camera in the corner" id="insetSeg">
@@ -97,6 +102,14 @@
             <button type="button" class="seg-btn" data-shape="landscape">Wide</button>
             <button type="button" class="seg-btn" data-shape="portrait">Tall</button>
             <button type="button" class="seg-btn" data-shape="square">Square</button>
+          </div>
+
+          <h2>Sound</h2>
+          <label class="check"><input type="checkbox" id="soundOn"> Record sound from the microphone</label>
+          <div id="micRow" hidden>
+            <label class="row"><span class="sr">Microphone</span><select id="micSelect" aria-label="Microphone"></select></label>
+            <div class="meter" aria-hidden="true"><span></span></div>
+            <p class="fine">The bar moves when the microphone hears you. On a phone, the filming partner’s phone does the listening — speak up!</p>
           </div>
 
           <h2>Character</h2>
@@ -117,9 +130,11 @@
       </div>
       <div class="perform-bar">
         <button class="round" type="button" data-go="scene" aria-label="Back to scene settings">⚙</button>
-        <button class="round" type="button" id="flipCam" aria-label="Switch camera">⟲</button>
+        <button class="round" type="button" id="flipCam" aria-label="Next camera">⟲</button>
+        <label class="cam-pick"><span class="sr">Camera</span><select id="camSelect" aria-label="Camera"></select></label>
         <button class="rec" type="button" id="recBtn" aria-label="Start recording"><span></span></button>
         <button class="round" type="button" id="snapBtn" aria-label="Take a picture">◉</button>
+        <button class="round mic" type="button" id="micBtn" aria-pressed="false" aria-label="Sound off — tap to record sound"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/><path class="slash" d="M4 4l16 16"/></svg></button>
         <button class="round" type="button" id="fullBtn" aria-label="Full screen">⛶</button>
       </div>
     </section>
@@ -129,7 +144,8 @@
   <div class="sheet" id="resultSheet" hidden role="dialog" aria-modal="true" aria-labelledby="resultTitle">
     <div class="sheet-card">
       <h2 id="resultTitle">Your animation</h2>
-      <video id="resultVideo" controls playsinline loop></video>
+      <div class="result-frame"><video id="resultVideo" controls playsinline loop></video></div>
+      <p class="fine note" id="resultNote" hidden></p>
       <div class="btn-row">
         <button class="btn primary" id="saveVideo" type="button">Save video</button>
         <button class="btn" id="closeResult" type="button">Done</button>
@@ -142,5 +158,6 @@
   <canvas id="glCanvas" class="offscreen"></canvas>
 
   <script type="module" src="js/animate/main.js"></script>
+  <script src="js/core/failsafe.js"></script>
 </body>
 </html>

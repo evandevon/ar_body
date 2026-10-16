@@ -24,10 +24,14 @@ The camera needs `https://`, which GitHub Pages provides.
 1. **Drawing** — take a photo of a drawing (or choose one, or *Try the example*). Best results: one character on plain white paper, thick dark lines, standing like a star with arms and legs apart and not touching the body.
 2. **Cut out** — the page removes the paper and evens out the lighting. White paper *inside* the outline stays part of the character. Paint with **Add / Erase** to fix mistakes; **Faint lines** picks up lighter pencil.
 3. **Joints** — drag the dots onto the head, neck, shoulders, elbows, hands, hips, knees and feet. Blue dots are limbs on the left of the picture, orange on the right. (Keyboard: Tab to the picture, `[` `]` choose a dot, arrows move it.)
-4. **Scene** — pick a background (animated sunny day, night sky, under the sea, stage, a plain colour, your own picture, or the live camera), where the **camera in the corner** goes (or off), the video shape (wide / tall / square), the character's size, and whether it moves around when the performer does.
+4. **Scene** — pick a background (animated sunny day, night sky, under the sea, stage, **green screen**, **transparent**, a plain colour, your own picture, or the live camera), the camera to use, where the **camera in the corner** goes (or off), the video shape (wide / tall / square), the character's size, and whether it moves around when the performer does.
 5. **Perform** — a partner points the camera (the back camera on phones) at the performer. The drawing copies their movements: each bone of the drawing copies the *angle* of the performer's matching bone, so any drawing works whatever its proportions. Press record for a 3-2-1 countdown; afterwards **Save video** (on phones this opens the share sheet, so it can go to Photos).
 
 The limb on the left of the camera picture moves the limb on the left of the drawing, so the character moves like the person looks on screen. Body parts the camera can't see (e.g. legs out of frame) relax back to the drawn pose.
+
+**For video editing:** *Green screen* records the character on bright green — remove it with any editor's chroma-key effect. *Transparent* records a WebM video with a genuinely see-through background, in Chrome and Edge only (Safari and Firefox can't record transparency). Some editors don't read transparent WebM; if yours shows black behind the character, use Green screen. To convert a transparent WebM for Final Cut / Premiere / After Effects: `ffmpeg -c:v libvpx -i my-animation.webm -c:v prores_ks -profile:v 4444 -pix_fmt yuva444p10le my-animation.mov`. Snapshots (◉) on Transparent save as see-through PNGs. Neither background draws the ground shadow, so keying is clean.
+
+**Sound:** tick *Record sound from the microphone* in Scene (or tap the microphone button while performing) to include sound in the video. It's off by default. The level bar shows the microphone is hearing you; pick a different microphone from the list if needed.
 
 Characters are kept on that device (browser storage) and appear under **Your characters** next time. They are not uploaded or put in a link. Recordings can leave out the camera picture entirely (camera corner **Off**), so students can share work without appearing in it.
 
@@ -75,6 +79,17 @@ python3 -m http.server 8000
 
 then open `http://localhost:8000`.
 
+## If the camera doesn't appear
+
+The camera starts on its own, even if body tracking can't load, and the page says what went wrong:
+
+- **"opened as a file"** — open the page from its web address, not by double-clicking the file.
+- **"Camera permission is blocked"** — click the camera/lock icon in the address bar and allow the camera. On a Mac, also allow the browser in System Settings → Privacy & Security → Camera.
+- **"The camera is busy"** / **"not sending a picture"** — another app (Teams, Zoom, Camera) is using it. Close it, or pick another camera.
+- **"Body tracking couldn't load"** — the network is blocking the tracker. The page tries `cdn.jsdelivr.net` first, then `unpkg.com`, and downloads its model from `storage.googleapis.com`. Ask IT to allow them.
+
+The camera lists update by themselves when a webcam or document camera is plugged in or out.
+
 ## Notes
 
 - The tracker loads from `cdn.jsdelivr.net` and `storage.googleapis.com` the first time (a few MB). If a school network blocks those, the page will say it can't load the body tracker.
@@ -89,7 +104,9 @@ overlays.html            AR Overlays
 css/                     styling
 js/app.js, js/body.js    AR Overlays: camera, overlays, sticking points
 js/animate/              Animate: cut-out, rig (mesh + bones), WebGL renderer, scenes, storage
-js/core/tracker.js       shared camera + body tracker helpers
+js/core/camera.js        shared camera, camera/mic lists, microphone
+js/core/tracker.js       body tracker loader (with backup source)
+js/core/failsafe.js      explains what's wrong if the page can't run
 assets/                  sample stickers, skeleton pictures, example drawing — host your own here too
 .nojekyll         tells GitHub Pages to serve files as-is
 ```

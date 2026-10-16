@@ -173,3 +173,5 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent);
 
 .home-link { display: inline-block; color: var(--muted); text-decoration: none; margin-bottom: 14px; font-size: 14px; }
 .home-link:hover { color: var(--text); }
+.splash-cam { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.splash-cam select { min-height: 40px; max-width: 70vw; padding: 6px 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; }

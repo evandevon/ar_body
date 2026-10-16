@@ -1,10 +1,11 @@
-import { FilesetResolver, PoseLandmarker } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.1.1/vision_bundle.mjs';
 import { ANCHORS, ANCHOR_BY_ID, computeAnchors, angleDiff } from './body.js';
+import { openCamera, stopStream, cameraErrorMessage, deviceList, waitForFrames } from './core/camera.js';
+
+// The body tracker downloads from the internet, so it's loaded separately: if a network blocks
+// it, the camera and overlays still work.
+let tracker; // module js/core/tracker.js once loaded
 
 // ---------------------------------------------------------------- config
-const WASM_PATH = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.1.1/wasm';
-const MODEL_URL = name =>
-  `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_${name}/float16/latest/pose_landmarker_${name}.task`;
 const KEY_MAX = 480; // max size (px) of green-screen processing, keeps it fast
 
 // ---------------------------------------------------------------- elements
@@ -28,7 +29,6 @@ const state = {
   skeleton: false,
   showAnchors: false,
   landmarker: null,
-  vision: null,
   result: null,
   lastVideoTime: -1,
   lastTs: 0,
@@ -53,72 +53,79 @@ async function loadModel() {
   const token = ++modelToken;
   setStatus('Loading body tracker…', { sticky: true });
   try {
-    state.vision ??= await FilesetResolver.forVisionTasks(WASM_PATH);
-    const opts = delegate => ({
-      baseOptions: { modelAssetPath: MODEL_URL(state.model), delegate },
-      runningMode: 'VIDEO',
-      numPoses: state.numPoses,
-      minPoseDetectionConfidence: 0.5,
-      minPosePresenceConfidence: 0.5,
-      minTrackingConfidence: 0.5,
-    });
-    let lm;
-    try { lm = await PoseLandmarker.createFromOptions(state.vision, opts('GPU')); }
-    catch (e) { console.warn('GPU unavailable, using CPU', e); lm = await PoseLandmarker.createFromOptions(state.vision, opts('CPU')); }
+    tracker ??= await import('./core/tracker.js');
+    const lm = await tracker.createPoseTracker({ model: state.model, numPoses: state.numPoses });
     if (token !== modelToken) { lm.close(); return; }
     state.landmarker?.close();
     state.landmarker = lm;
+    state.trackerMsg = '';
     state.lastTs = 0;
     setStatus(state.stream ? 'Body tracker ready' : 'Body tracker ready — start the camera');
   } catch (e) {
     console.error(e);
-    setStatus('Could not load the body tracker. Check your internet connection (it needs cdn.jsdelivr.net and storage.googleapis.com).', { sticky: true, error: true });
+    if (token !== modelToken) return;
+    state.trackerMsg = tracker ? tracker.trackerErrorMessage(e) : 'Body tracking couldn’t load. The camera still works.';
+    setStatus(state.trackerMsg, { sticky: true, error: true });
   }
 }
 
 // ---------------------------------------------------------------- camera
+let camToken = 0;
 function stopCamera() {
-  state.stream?.getTracks().forEach(t => t.stop());
+  stopStream(state.stream);
   state.stream = null;
 }
 
 async function startCamera() {
-  if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-    setStatus('The camera only works on https:// pages (like GitHub Pages) or localhost.', { sticky: true, error: true });
-    return;
-  }
+  const token = ++camToken;
   stopCamera();
-  const video = { width: { ideal: 1280 }, height: { ideal: 720 } };
-  if (state.deviceId) video.deviceId = { exact: state.deviceId };
-  else video.facingMode = state.facing;
-  try {
-    state.stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
-  } catch (e) {
+  setStatus('Starting camera…', { sticky: true });
+  let r;
+  try { r = await openCamera(cam, { deviceId: state.deviceId, facing: state.facing }); }
+  catch (e) {
     console.error(e);
-    const denied = e.name === 'NotAllowedError';
-    setStatus(denied ? 'Camera permission was blocked. Allow it in the browser’s address bar and try again.' : `Camera error: ${e.message}`, { sticky: true, error: true });
+    if (token === camToken) setStatus(cameraErrorMessage(e), { sticky: true, error: true });
+    cameras.refresh();
     return;
   }
-  cam.srcObject = state.stream;
-  await cam.play().catch(() => {});
-  const settings = state.stream.getVideoTracks()[0].getSettings();
-  if (settings.facingMode) { state.facing = settings.facingMode; state.mirror = settings.facingMode !== 'environment'; }
+  if (token !== camToken) { stopStream(r.stream); return; }
+  state.stream = r.stream;
+  state.deviceId = r.deviceId;
+  if (r.facing) state.facing = r.facing;
+  state.mirror = r.facing ? r.facing !== 'environment' : state.mirror;
   $('#mirror').checked = state.mirror;
   state.lastVideoTime = -1;
   $('#splash').hidden = true;
   document.body.classList.add('live');
-  await listCameras();
-  if (!state.landmarker) setStatus('Camera on — body tracker still loading…', { sticky: true });
+  r.stream.getVideoTracks()[0]?.addEventListener('ended', () => {
+    if (state.stream !== r.stream) return;
+    setStatus('The camera stopped (unplugged or taken by another app). Choose a camera from the list.', { sticky: true, error: true });
+    state.deviceId = '';
+    cameras.refresh();
+  });
+  await cameras.refresh();
+  if (!(await waitForFrames(cam))) {
+    if (token === camToken) setStatus('The camera is on but not sending a picture. It may be in use by another app, or try another camera from the list.', { sticky: true, error: true });
+    return;
+  }
+  if (token !== camToken) return;
+  if (state.landmarker) setStatus('');
+  else if (state.trackerMsg) setStatus(state.trackerMsg, { sticky: true, error: true });
+  else setStatus('Camera on — body tracker still loading…', { sticky: true });
 }
 
-async function listCameras() {
-  const sel = $('#cameraSelect');
-  const devices = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
-  const current = state.stream?.getVideoTracks()[0]?.getSettings().deviceId;
-  sel.innerHTML = '';
-  devices.forEach((d, i) => sel.add(new Option(d.label || `Camera ${i + 1}`, d.deviceId, false, d.deviceId === current)));
-  $('#flipBtn').hidden = devices.length < 2;
-}
+// live-updating camera list (plugging in a USB/document camera adds it straight away)
+const cameras = deviceList($('#cameraSelect'), {
+  kind: 'videoinput',
+  getCurrent: () => state.stream?.getVideoTracks()[0]?.getSettings().deviceId || state.deviceId,
+  onChange: id => { state.deviceId = id; startCamera(); },
+  onListChange: devices => { $('#flipBtn').hidden = devices.length < 2; $('#splashCameraRow').hidden = devices.length < 2; },
+});
+const splashCams = deviceList($('#splashCamera'), {
+  kind: 'videoinput',
+  getCurrent: () => state.deviceId,
+  onChange: id => { state.deviceId = id; },
+});
 
 // ---------------------------------------------------------------- media loading
 const isRemote = src => /^https?:/i.test(src) && new URL(src, location.href).origin !== location.origin;
@@ -474,7 +481,7 @@ async function applyLayout(data) {
       try { await state.landmarker?.setOptions({ numPoses: data.p }); } catch {}
     }
     if (['lite', 'full', 'heavy'].includes(data.q) && data.q !== state.model) {
-      state.model = data.q; $('#model').value = data.q; if (state.vision) loadModel();
+      state.model = data.q; $('#model').value = data.q; if (tracker) loadModel();
     }
     for (const e of Array.isArray(data.o) ? data.o : []) {
       if (typeof e?.u !== 'string' || !/^https?:\/\//i.test(e.u)) continue;
@@ -590,7 +597,7 @@ function drawSkeleton() {
   (state.result?.landmarks ?? []).forEach((lm, n) => {
     ctx.strokeStyle = 'rgba(120, 255, 200, 0.85)';
     ctx.beginPath();
-    for (const { start, end } of PoseLandmarker.POSE_CONNECTIONS) {
+    for (const { start, end } of tracker?.poseConnections() ?? []) {
       const a = lm[start], b = lm[end];
       if (vis(a) < 0.5 || vis(b) < 0.5) continue;
       ctx.moveTo(X(a), a.y * H);
@@ -727,8 +734,15 @@ function toggleRecording() {
 
 // ---------------------------------------------------------------- wiring
 $('#startBtn').onclick = startCamera;
-$('#flipBtn').onclick = () => { state.deviceId = ''; state.facing = state.facing === 'user' ? 'environment' : 'user'; startCamera(); };
-$('#cameraSelect').onchange = e => { state.deviceId = e.target.value; startCamera(); };
+// cycles through cameras (front/back on phones)
+$('#flipBtn').onclick = async () => {
+  const devices = await cameras.refresh();
+  const cur = state.stream?.getVideoTracks()[0]?.getSettings().deviceId;
+  const i = devices.findIndex(d => d.deviceId === cur);
+  if (devices.length > 1 && devices[0].deviceId) state.deviceId = devices[(i + 1) % devices.length].deviceId;
+  else { state.deviceId = ''; state.facing = state.facing === 'user' ? 'environment' : 'user'; }
+  startCamera();
+};
 $('#mirror').onchange = e => (state.mirror = e.target.checked);
 $('#snapBtn').onclick = snapshot;
 $('#recordBtn').onclick = toggleRecording;
@@ -809,3 +823,4 @@ updateEmpty();
 loadModel();
 loadFromLink();
 requestAnimationFrame(frame);
+window.__appReady = true;

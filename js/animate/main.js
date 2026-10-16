@@ -3,11 +3,13 @@ import { JOINTS, LINKS, guessJoints, buildRig, Puppet, readPerformer } from './r
 import { PuppetRenderer } from './renderer.js';
 import { SCENES, drawCover } from './backgrounds.js';
 import { saveCharacter, listCharacters, deleteCharacter, getCharacter } from './storage.js';
+import { openCamera, stopStream, cameraErrorMessage, deviceList, waitForFrames, openMic, micErrorMessage, levelMeter } from '../core/camera.js';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const MAX_SIDE = 720; // photos are processed at this size — plenty for a drawing, fast on phones
 const STAGE = { landscape: [1280, 720], portrait: [720, 1280], square: [960, 960] };
+const GREEN = '#00ff00'; // bright chroma-key green
 const isPhone = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.userAgent));
 
 // ------------------------------------------------------------------ state
@@ -28,7 +30,7 @@ const S = {
   recorder: null,
 };
 
-const DEFAULT_SETTINGS = { scene: 'sky', colour: '#ffd9e8', inset: 'tr', insetDots: false, shape: isPhone ? 'portrait' : 'landscape', size: 0.72, move: true };
+const DEFAULT_SETTINGS = { scene: 'sky', colour: '#ffffff', inset: 'tr', insetDots: false, shape: isPhone ? 'portrait' : 'landscape', size: 0.72, move: true, sound: false, camId: '', micId: '' };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('animate-settings') || '{}')); } catch {}
 const saveSettings = () => { try { localStorage.setItem('animate-settings', JSON.stringify(settings)); } catch {} };
@@ -60,10 +62,11 @@ async function show(step) {
     li.classList.toggle('done', i < at);
     if (i === at) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current');
   });
-  if (prev === 'perform' && step !== 'perform') leavePerform();
+  if (prev === 'perform' && step !== 'perform') leavePerform(step);
+  if (prev === 'scene' && step !== 'perform' && step !== 'scene') releaseMic();
   if (step === 'drawing') renderSaved();
-  if (step === 'cutout') { fitCanvas($('#cutCanvas'), S.photo.w, S.photo.h); renderCut(); }
-  if (step === 'joints') { fitCanvas($('#jointCanvas'), S.cut.w, S.cut.h); renderJoints(); }
+  if (step === 'cutout') { fitCanvas($('#cutCanvas'), S.photo.w, S.photo.h); S.cutBaseVersion = -1; fitDisplay($('#cutCanvas')); renderCut(); }
+  if (step === 'joints') { fitCanvas($('#jointCanvas'), S.cut.w, S.cut.h); fitDisplay($('#jointCanvas')); renderJoints(); }
   if (step === 'scene') enterScene();
   if (step === 'perform') enterPerform();
 }
@@ -74,6 +77,18 @@ $$('[data-go]').forEach(b => (b.onclick = () => {
 }));
 
 function fitCanvas(c, w, h) { if (c.width !== w || c.height !== h) { c.width = w; c.height = h; } }
+
+// Sizes a canvas on screen to fit its box (keeping its shape), so it never pushes buttons off
+// screen and pointer positions map exactly onto the picture.
+function fitDisplay(c) {
+  const box = c.parentElement.getBoundingClientRect();
+  if (!box.width || !box.height || !c.width) return;
+  const k = Math.min(box.width / c.width, box.height / c.height);
+  c.style.width = `${Math.floor(c.width * k)}px`;
+  c.style.height = `${Math.floor(c.height * k)}px`;
+}
+const fitAll = () => $$('.work canvas, #stageCanvas').forEach(c => c.offsetParent && fitDisplay(c));
+new ResizeObserver(fitAll).observe(document.body);
 
 // ------------------------------------------------------------------ 1. drawing
 async function loadPhoto(src) {
@@ -91,6 +106,7 @@ async function loadPhoto(src) {
   S.paper = paperMap(data);
   S.auto = findCharacter(data, { sensitivity: +$('#sensitivity').value, paper: S.paper }).mask;
   S.add = new Uint8Array(w * h);
+  S.cutBaseVersion = -1;
   S.erase = new Uint8Array(w * h);
   S.undo = [];
   updateMask();
@@ -152,34 +168,72 @@ function updateMask() {
 }
 
 let cutQueued = false;
+S.cutBase = document.createElement('canvas');
+S.cutBaseVersion = -1;
+S.brushPos = null; // where the brush circle is drawn (picture pixels), or null when hidden
+
+function buildCutBase() {
+  const { w, h, data } = S.photo;
+  const base = S.cutBase;
+  fitCanvas(base, w, h);
+  const g = base.getContext('2d');
+  const out = g.createImageData(w, h);
+  const m = S.mask, src = data.data, o = out.data;
+  for (let i = 0; i < w * h; i++) {
+    const p = i * 4;
+    if (m[i]) {
+      const x = i % w;
+      const edge = (x > 0 && !m[i - 1]) || (x < w - 1 && !m[i + 1]) || (i >= w && !m[i - w]) || (i < w * (h - 1) && !m[i + w]);
+      if (edge) { o[p] = 255; o[p + 1] = 200; o[p + 2] = 61; }
+      else { o[p] = src[p]; o[p + 1] = src[p + 1]; o[p + 2] = src[p + 2]; }
+    } else {
+      o[p] = src[p] * 0.28; o[p + 1] = src[p + 1] * 0.28; o[p + 2] = src[p + 2] * 0.32;
+    }
+    o[p + 3] = 255;
+  }
+  g.putImageData(out, 0, 0);
+  S.cutBaseVersion = S.maskVersion;
+}
+
 function renderCut() {
   if (cutQueued) return;
   cutQueued = true;
   requestAnimationFrame(() => {
     cutQueued = false;
-    const { w, h, data } = S.photo;
+    if (!S.photo) return;
+    if (S.cutBaseVersion !== S.maskVersion) buildCutBase();
     const c = $('#cutCanvas'), g = c.getContext('2d');
-    const out = g.createImageData(w, h);
-    const m = S.mask, src = data.data, o = out.data;
-    for (let i = 0; i < w * h; i++) {
-      const p = i * 4;
-      if (m[i]) {
-        const x = i % w;
-        const edge = (x > 0 && !m[i - 1]) || (x < w - 1 && !m[i + 1]) || (i >= w && !m[i - w]) || (i < w * (h - 1) && !m[i + w]);
-        if (edge) { o[p] = 255; o[p + 1] = 200; o[p + 2] = 61; }
-        else { o[p] = src[p]; o[p + 1] = src[p + 1]; o[p + 2] = src[p + 2]; }
-      } else {
-        o[p] = src[p] * 0.28; o[p + 1] = src[p + 1] * 0.28; o[p + 2] = src[p + 2] * 0.32;
-      }
-      o[p + 3] = 255;
+    g.drawImage(S.cutBase, 0, 0);
+    if (S.brushPos) {
+      // the circle shows exactly what a click will add or erase
+      const { x, y } = S.brushPos, r = brushRadius(c);
+      const add = brushMode === 'add', k = c.width / (c.getBoundingClientRect().width || c.width);
+      g.save();
+      g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2);
+      g.fillStyle = add ? 'rgba(255,255,255,.18)' : 'rgba(255,80,80,.22)';
+      g.fill();
+      g.lineWidth = 3 * k; g.strokeStyle = 'rgba(0,0,0,.8)'; g.stroke();
+      g.lineWidth = 1.5 * k; g.strokeStyle = add ? '#ffffff' : '#ff6b6b';
+      if (!add) g.setLineDash([5 * k, 4 * k]);
+      g.stroke();
+      g.setLineDash([]);
+      // + or − in the middle
+      const t = Math.min(r * 0.5, 9 * k);
+      g.beginPath(); g.moveTo(x - t, y); g.lineTo(x + t, y);
+      if (add) { g.moveTo(x, y - t); g.lineTo(x, y + t); }
+      g.lineWidth = 3 * k; g.strokeStyle = 'rgba(0,0,0,.8)'; g.stroke();
+      g.lineWidth = 1.5 * k; g.strokeStyle = add ? '#ffffff' : '#ff6b6b'; g.stroke();
+      g.restore();
     }
-    g.putImageData(out, 0, 0);
   });
 }
+// brush size slider is in screen pixels, so the circle looks the same size at any zoom
+const brushRadius = c => (+$('#brushSize').value / 2) * (c.width / (c.getBoundingClientRect().width || c.width));
 
 let brushMode = 'add';
 const setBrush = mode => {
   brushMode = mode;
+  renderCut();
   $('#addBrush').setAttribute('aria-pressed', String(mode === 'add'));
   $('#eraseBrush').setAttribute('aria-pressed', String(mode === 'erase'));
 };
@@ -197,27 +251,42 @@ function paint(x, y, r) {
 {
   const c = $('#cutCanvas');
   let last = null;
+  const at = e => { const p = canvasPoint(c, e); return { x: p.x, y: p.y }; };
   c.addEventListener('pointerdown', e => {
     c.setPointerCapture(e.pointerId);
     S.undo.push([S.add.slice(), S.erase.slice()]);
     if (S.undo.length > 20) S.undo.shift();
-    const p = canvasPoint(c, e);
-    last = p;
-    paint(p.x, p.y, (+$('#brushSize').value / 2) * p.k);
+    const p = at(e);
+    last = p; S.brushPos = p;
+    paint(p.x, p.y, brushRadius(c));
     updateMask(); renderCut();
   });
   c.addEventListener('pointermove', e => {
-    if (!last) return;
-    const p = canvasPoint(c, e), r = (+$('#brushSize').value / 2) * p.k;
-    const steps = Math.max(1, Math.ceil(Math.hypot(p.x - last.x, p.y - last.y) / (r * 0.5)));
-    for (let k = 1; k <= steps; k++) paint(last.x + ((p.x - last.x) * k) / steps, last.y + ((p.y - last.y) * k) / steps, r);
-    last = p;
-    updateMask(); renderCut();
+    const p = at(e);
+    S.brushPos = p;
+    if (last) {
+      const r = brushRadius(c);
+      const steps = Math.max(1, Math.ceil(Math.hypot(p.x - last.x, p.y - last.y) / (r * 0.5)));
+      for (let k = 1; k <= steps; k++) paint(last.x + ((p.x - last.x) * k) / steps, last.y + ((p.y - last.y) * k) / steps, r);
+      last = p;
+      updateMask();
+    }
+    renderCut();
   });
-  const end = () => (last = null);
+  const end = e => { last = null; if (e.pointerType !== 'mouse') S.brushPos = null; renderCut(); };
   c.addEventListener('pointerup', end);
   c.addEventListener('pointercancel', end);
+  c.addEventListener('pointerleave', () => { if (!last) { S.brushPos = null; renderCut(); } });
 }
+// show the brush size while the slider moves
+let sizePreviewTimer;
+$('#brushSize').addEventListener('input', () => {
+  const c = $('#cutCanvas');
+  if (!S.brushPos || S.brushPos.preview) S.brushPos = { x: c.width / 2, y: c.height / 2, preview: true };
+  renderCut();
+  clearTimeout(sizePreviewTimer);
+  sizePreviewTimer = setTimeout(() => { if (S.brushPos?.preview) { S.brushPos = null; renderCut(); } }, 900);
+});
 $('#undoBtn').onclick = () => {
   const u = S.undo.pop();
   if (!u) return;
@@ -355,9 +424,13 @@ $('#jointsNext').onclick = async () => { await prepareRig(true); show('scene'); 
 // ------------------------------------------------------------------ drawing the stage
 function stageSize() { return STAGE[settings.shape] || STAGE.landscape; }
 
+const currentScene = () => SCENES.find(s => s.id === settings.scene) || SCENES[0];
 function drawBackground(g, W, H, t) {
-  const sc = SCENES.find(s => s.id === settings.scene) || SCENES[0];
+  const sc = currentScene();
+  g.clearRect(0, 0, W, H);
   if (sc.draw) return sc.draw(g, W, H, t);
+  if (sc.id === 'transparent') return; // left see-through
+  if (sc.id === 'green') { g.fillStyle = GREEN; g.fillRect(0, 0, W, H); return; }
   if (sc.id === 'colour') { g.fillStyle = settings.colour; g.fillRect(0, 0, W, H); return; }
   g.fillStyle = '#20262d'; g.fillRect(0, 0, W, H);
   if (sc.id === 'picture' && S.bgImage) drawCover(g, S.bgImage, S.bgImage.naturalWidth, S.bgImage.naturalHeight, W, H);
@@ -420,11 +493,15 @@ function drawStage(g, W, H, t, positions) {
     const ground = H * 0.93;
     const offX = W / 2 - (rig.w / 2) * scale;
     const offY = ground - rig.h * scale;
-    // soft shadow on the ground under the character
+    // soft shadow on the ground under the character (not on keyable backgrounds: it would
+    // leave a dark smudge after the green / transparency is removed)
     const root = S.puppet?.joints?.root ?? rig.joints.root;
     const lift = Math.max(0, (rig.joints.root.y - root.y) * scale);
     g.save();
+    if (currentScene().key) g.globalAlpha = 0;
+    else
     g.globalAlpha = Math.max(0.08, 0.28 - lift / H);
+
     g.fillStyle = '#000';
     g.beginPath(); g.ellipse(offX + root.x * scale, ground - H * 0.01, rig.w * scale * 0.3, H * 0.018, 0, 0, Math.PI * 2); g.fill();
     g.restore();
@@ -447,7 +524,12 @@ function buildSceneTiles() {
     const g = cv.getContext('2d');
     if (sc.draw) sc.draw(g, 160, 100, 2);
     else {
-      g.fillStyle = sc.id === 'colour' ? settings.colour : '#2a333c'; g.fillRect(0, 0, 160, 100);
+      if (sc.id === 'transparent') {
+        for (let y = 0; y < 100; y += 12) for (let x = 0; x < 160; x += 12) { g.fillStyle = (x + y) % 24 ? '#9aa4ad' : '#e4e8eb'; g.fillRect(x, y, 12, 12); }
+      } else {
+        g.fillStyle = sc.id === 'colour' ? settings.colour : sc.id === 'green' ? GREEN : '#2a333c';
+        g.fillRect(0, 0, 160, 100);
+      }
       g.fillStyle = '#cfd8e0'; g.font = '34px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
       g.fillText(sc.id === 'picture' ? '🖼' : sc.id === 'camera' ? '📷' : '', 80, 52);
     }
@@ -461,6 +543,13 @@ function syncSceneUI() {
   $$('.tile').forEach(t => t.setAttribute('aria-checked', String(t.dataset.scene === settings.scene)));
   $('#colourRow').hidden = settings.scene !== 'colour';
   $('#pictureRow').hidden = settings.scene !== 'picture';
+  const note = $('#bgNote');
+  note.textContent = settings.scene === 'transparent'
+    ? (canRecordAlpha() ? 'Videos save as see-through WebM. Not every video editor can read these — use Green screen if yours can’t.' : 'This browser can’t record see-through video. Use Chrome or Edge, or choose Green screen.')
+    : settings.scene === 'green' ? 'Remove the green later with your video editor’s chroma key (green screen) effect. Keep green clothes and drawings out of the picture.'
+    : '';
+  note.hidden = !note.textContent;
+  $('.preview').classList.toggle('see-through', settings.scene === 'transparent');
   $('#bgColour').value = settings.colour;
   $$('[data-inset]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.inset === settings.inset)));
   $$('[data-shape]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.shape === settings.shape)));
@@ -470,6 +559,7 @@ function syncSceneUI() {
   $('#moveAround').checked = settings.move;
   const [W, H] = stageSize();
   fitCanvas($('#previewCanvas'), W, H);
+  fitDisplay($('#previewCanvas'));
 }
 $$('[data-inset]').forEach(b => (b.onclick = () => { settings.inset = b.dataset.inset; saveSettings(); syncSceneUI(); }));
 $$('[data-shape]').forEach(b => (b.onclick = () => { settings.shape = b.dataset.shape; saveSettings(); syncSceneUI(); }));
@@ -490,6 +580,9 @@ function enterScene() {
   if (!S.rig) { show('drawing'); return; }
   buildSceneTiles();
   syncSceneUI();
+  syncSoundUI();
+  cameras.refresh();
+  if (settings.sound) ensureMic();
   S.puppet = new Puppet(S.rig);
   const restPose = S.puppet.pose();
   cancelAnimationFrame(previewRAF);
@@ -498,7 +591,7 @@ function enterScene() {
     previewRAF = requestAnimationFrame(loop);
     const c = $('#previewCanvas');
     const [W, H] = stageSize();
-    fitCanvas(c, W, H);
+    if (c.width !== W || c.height !== H) { fitCanvas(c, W, H); fitDisplay(c); }
     drawStage(c.getContext('2d'), W, H, now / 1000, restPose);
   };
   previewRAF = requestAnimationFrame(loop);
@@ -507,63 +600,152 @@ $('#sceneNext').onclick = () => show('perform');
 
 // ------------------------------------------------------------------ 5. perform
 const cam = $('#camera');
-let tracking; // the tracker module, loaded when first needed (it downloads a few MB)
+let tracking; // js/core/tracker.js, loaded when first needed (downloads a few MB from the internet)
 let wakeLock = null;
+let camToken = 0;
+
+function setHint(msg, error = false) {
+  const h = $('#performHint');
+  h.textContent = msg;
+  h.classList.toggle('error', error && !!msg);
+  h.dataset.sticky = error ? '1' : '';
+}
 
 async function startCamera() {
-  tracking ??= await import('../core/tracker.js');
+  const token = ++camToken;
   stopCamera();
-  try {
-    const r = await tracking.openCamera(cam, { facing: S.cam.facing });
-    S.cam.stream = r.stream;
-    S.cam.facing = r.facing;
-    S.cam.mirror = r.facing !== 'environment';
-    S.lastVideoTime = -1;
-    const n = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput').length;
-    $('#flipCam').hidden = n < 2;
-  } catch (e) {
+  let r;
+  try { r = await openCamera(cam, { deviceId: settings.camId, facing: S.cam.facing }); }
+  catch (e) {
     console.error(e);
-    $('#performHint').textContent = tracking.cameraErrorMessage(e);
+    if (token === camToken) setHint(cameraErrorMessage(e), true);
+    cameras.refresh();
+    return;
   }
+  if (token !== camToken) { stopStream(r.stream); return; }
+  S.cam.stream = r.stream;
+  if (r.facing) S.cam.facing = r.facing;
+  S.cam.mirror = r.facing ? r.facing !== 'environment' : !isPhone;
+  S.lastVideoTime = -1;
+  if (r.deviceId) { settings.camId = r.deviceId; saveSettings(); }
+  r.stream.getVideoTracks()[0]?.addEventListener('ended', () => {
+    if (S.cam.stream !== r.stream) return;
+    setHint('The camera stopped (unplugged or taken by another app). Choose a camera from the list.', true);
+    cameras.refresh();
+  });
+  cameras.refresh();
+  if (!(await waitForFrames(cam))) {
+    if (token === camToken) setHint('The camera is on but not sending a picture. Close other apps using it, or choose another camera.', true);
+    return;
+  }
+  if (token === camToken && $('#performHint').dataset.sticky && !S.trackerError) setHint('');
 }
 function stopCamera() {
-  S.cam.stream?.getTracks().forEach(t => t.stop());
+  stopStream(S.cam.stream);
   S.cam.stream = null;
 }
+
+// every camera list on the page stays up to date as cameras are plugged in or out
+const cameras = deviceList([$('#camSelect'), $('#camSelectScene')], {
+  kind: 'videoinput',
+  getCurrent: () => S.cam.stream?.getVideoTracks()[0]?.getSettings().deviceId || settings.camId,
+  onChange: id => { settings.camId = id; saveSettings(); cameras.refresh(); if (S.step === 'perform') startCamera(); },
+  onListChange: devices => { $('#flipCam').hidden = devices.length < 2; },
+});
 
 async function loadTracker() {
   if (S.tracker) return;
   S.trackerLoading ??= (async () => {
-    tracking ??= await import('../core/tracker.js');
-    $('#performHint').textContent = 'Loading body tracker…';
-    try { S.tracker = await tracking.createPoseTracker({ model: 'lite' }); $('#performHint').textContent = ''; }
-    catch (e) {
+    try {
+      tracking ??= await import('../core/tracker.js');
+      if (!$('#performHint').dataset.sticky) setHint('Loading body tracker…');
+      S.tracker = await tracking.createPoseTracker({ model: 'lite' });
+      S.trackerError = null;
+      if (!$('#performHint').dataset.sticky) setHint('');
+    } catch (e) {
       console.error(e);
-      $('#performHint').textContent = 'Couldn’t load the body tracker. Check the internet connection.';
+      S.trackerError = e;
+      setHint(tracking ? tracking.trackerErrorMessage(e) : 'Body tracking couldn’t load. The camera still works.', true);
       S.trackerLoading = null;
     }
   })();
   return S.trackerLoading;
 }
 
+// ---------- microphone (optional)
+let meter = null;
+async function ensureMic() {
+  if (!settings.sound) return null;
+  if (S.mic?.active) return S.mic;
+  try {
+    S.mic = await openMic(settings.micId);
+    const id = S.mic.getAudioTracks()[0]?.getSettings().deviceId;
+    if (id) { settings.micId = id; saveSettings(); }
+    mics.refresh();
+    meter?.stop();
+    meter = levelMeter(S.mic, lvl => {
+      document.documentElement.style.setProperty('--mic-level', lvl.toFixed(2));
+    });
+    syncSoundUI();
+    return S.mic;
+  } catch (e) {
+    console.error(e);
+    toast(micErrorMessage(e), { error: true, ms: 6000 });
+    settings.sound = false; saveSettings(); syncSoundUI();
+    return null;
+  }
+}
+function releaseMic() {
+  meter?.stop(); meter = null;
+  stopStream(S.mic); S.mic = null;
+  document.documentElement.style.setProperty('--mic-level', '0');
+}
+const mics = deviceList($('#micSelect'), {
+  kind: 'audioinput',
+  getCurrent: () => S.mic?.getAudioTracks()[0]?.getSettings().deviceId || settings.micId,
+  onChange: async id => { settings.micId = id; saveSettings(); releaseMic(); await ensureMic(); },
+});
+function syncSoundUI() {
+  $('#soundOn').checked = settings.sound;
+  $('#micRow').hidden = !settings.sound;
+  const b = $('#micBtn');
+  b.setAttribute('aria-pressed', String(settings.sound));
+  b.setAttribute('aria-label', settings.sound ? 'Sound on — tap to turn off' : 'Sound off — tap to record sound');
+  b.classList.toggle('off', !settings.sound);
+}
+async function setSound(on) {
+  settings.sound = on; saveSettings(); syncSoundUI();
+  if (on) await ensureMic(); else releaseMic();
+}
+$('#soundOn').onchange = e => setSound(e.target.checked);
+$('#micBtn').onclick = () => { if (!S.recorder) setSound(!settings.sound); };
+
 let performRAF = 0, lastFrame = 0;
 async function enterPerform() {
   if (!S.rig) { show('drawing'); return; }
   const [W, H] = stageSize();
   fitCanvas($('#stageCanvas'), W, H);
+  requestAnimationFrame(() => fitDisplay($('#stageCanvas')));
+  $('.stage-wrap').classList.toggle('see-through', settings.scene === 'transparent');
   S.puppet = new Puppet(S.rig);
+  setHint('');
+  syncSoundUI();
   $('#fullBtn').hidden = !document.documentElement.requestFullscreen;
   try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {}
   cancelAnimationFrame(performRAF);
   performRAF = requestAnimationFrame(performLoop);
+  // camera first: it must work even if the tracker can't download
   await startCamera();
-  await loadTracker();
+  ensureMic();
+  loadTracker();
 }
 
-function leavePerform() {
+function leavePerform(next) {
   if (S.recorder) S.recorder.stop();
   cancelAnimationFrame(performRAF);
+  camToken++;
   stopCamera();
+  if (next !== 'scene') releaseMic();
   wakeLock?.release?.().catch(() => {});
   wakeLock = null;
 }
@@ -590,19 +772,35 @@ function performLoop(now) {
   const [W, H] = stageSize();
   drawStage(c.getContext('2d'), W, H, now / 1000, positions);
 
-  const hint = $('#performHint');
-  if (S.tracker && S.cam.stream && !S.recorder) {
-    hint.textContent = now - S.lastSeen > 1200 ? 'Point the camera at the performer — whole body in view works best' : '';
-  } else if (S.recorder && hint.textContent && S.tracker) hint.textContent = '';
+  if (S.tracker && S.cam.stream && !S.recorder && !$('#performHint').dataset.sticky) {
+    setHint(now - S.lastSeen > 1200 ? 'Point the camera at the performer — whole body in view works best' : '');
+  } else if (S.recorder && !$('#performHint').dataset.sticky) setHint('');
 }
 
+// cycles through the cameras (front/back on phones)
 $('#flipCam').onclick = async () => {
-  S.cam.facing = S.cam.facing === 'user' ? 'environment' : 'user';
+  const devices = await cameras.refresh();
+  const cur = S.cam.stream?.getVideoTracks()[0]?.getSettings().deviceId;
+  const i = devices.findIndex(d => d.deviceId === cur);
+  if (devices.length > 1 && devices[0].deviceId) settings.camId = devices[(i + 1) % devices.length].deviceId;
+  else { settings.camId = ''; S.cam.facing = S.cam.facing === 'user' ? 'environment' : 'user'; }
+  saveSettings();
   await startCamera();
 };
 $('#fullBtn').onclick = () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.().catch(() => {}));
 
 // --- recording
+const isChromium = !!window.chrome || /Edg\//.test(navigator.userAgent);
+const canRecordAlpha = () => isChromium && window.MediaRecorder && ['video/webm;codecs=vp8', 'video/webm;codecs=vp9'].some(t => MediaRecorder.isTypeSupported(t));
+
+function pickType(transparent, withAudio) {
+  const list = transparent
+    ? ['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8', 'video/webm;codecs=vp9', 'video/webm']
+    : ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+  const usable = withAudio ? list : list.filter(t => !/opus|mp4a/.test(t));
+  return usable.find(t => MediaRecorder.isTypeSupported(t)) || '';
+}
+
 async function countdown(n) {
   const el = $('#countdown');
   el.hidden = false;
@@ -616,13 +814,19 @@ $('#recBtn').onclick = async () => {
   const c = $('#stageCanvas');
   if (!window.MediaRecorder || !c.captureStream) { toast('Recording isn’t supported in this browser.', { error: true }); return; }
   recBusy = true;
+  const mic = settings.sound ? await ensureMic() : null;
   await countdown(3);
   recBusy = false;
   if (S.step !== 'perform') return;
-  const type = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'].find(t => MediaRecorder.isTypeSupported(t)) || '';
+  const transparent = settings.scene === 'transparent';
+  if (transparent && !canRecordAlpha()) toast('This browser can’t record see-through video, so the background will be black. Use Chrome or Edge, or the Green screen background.', { error: true, ms: 7000 });
+  const stream = c.captureStream(30);
+  const audioTrack = mic?.getAudioTracks()[0];
+  if (audioTrack) stream.addTrack(audioTrack);
+  const type = pickType(transparent, !!audioTrack);
   let rec;
   try {
-    rec = new MediaRecorder(c.captureStream(30), type ? { mimeType: type, videoBitsPerSecond: 5e6 } : {});
+    rec = new MediaRecorder(stream, type ? { mimeType: type, videoBitsPerSecond: 5e6, audioBitsPerSecond: 128e3 } : {});
     const chunks = [];
     rec.ondataavailable = e => e.data.size && chunks.push(e.data);
     rec.onstop = () => {
@@ -631,8 +835,9 @@ $('#recBtn').onclick = async () => {
       $('#recBtn').classList.remove('recording');
       $('#recBtn').setAttribute('aria-label', 'Start recording');
       $('#recTime').hidden = true;
+      $('#micBtn').disabled = false;
       const mime = rec.mimeType || type || 'video/webm';
-      showResult(new Blob(chunks, { type: mime }), mime);
+      showResult(new Blob(chunks, { type: mime }), mime, { transparent: transparent && canRecordAlpha(), sound: !!audioTrack });
     };
     rec.start(1000);
   } catch (e) {
@@ -641,6 +846,7 @@ $('#recBtn').onclick = async () => {
     return;
   }
   S.recorder = rec;
+  $('#micBtn').disabled = true;
   $('#recBtn').classList.add('recording');
   $('#recBtn').setAttribute('aria-label', 'Stop recording');
   const t0 = Date.now();
@@ -653,10 +859,17 @@ $('#recBtn').onclick = async () => {
 };
 
 let resultFile = null;
-function showResult(blob, mime) {
+function showResult(blob, mime, { transparent = false, sound = false } = {}) {
   const ext = mime.includes('mp4') ? 'mp4' : 'webm';
-  resultFile = new File([blob], `my-animation-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.${ext}`, { type: mime });
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+  resultFile = new File([blob], `my-animation-${transparent ? 'transparent-' : ''}${stamp}.${ext}`, { type: mime });
+  $('#resultNote').textContent = transparent
+    ? 'This video has a see-through background (WebM). Some video editors can’t read see-through WebM — if yours shows black behind the character, record again with the Green screen background.'
+    : settings.scene === 'green' || settings.scene === 'colour' ? 'Use your video editor’s chroma key (green screen) effect to remove the background.' : '';
+  $('#resultNote').hidden = !$('#resultNote').textContent;
+  $('#resultSheet').classList.toggle('see-through', transparent);
   const v = $('#resultVideo');
+  v.muted = !sound;
   if (v.src) URL.revokeObjectURL(v.src);
   v.src = URL.createObjectURL(blob);
   $('#resultSheet').hidden = false;
@@ -687,3 +900,4 @@ document.addEventListener('visibilitychange', async () => {
 
 // ------------------------------------------------------------------ start
 show('drawing');
+window.__appReady = true;

@@ -19,6 +19,7 @@
         <img src="assets/sparkle.svg" alt="" width="72" height="72">
         <h1>AR Overlays</h1>
         <p>Point the camera at someone and stick pictures and videos to their head, hands, body and feet.</p>
+        <label class="splash-cam" id="splashCameraRow" hidden>Camera <select id="splashCamera" aria-label="Choose camera"></select></label>
         <button id="startBtn" class="btn primary big" type="button">Start camera</button>
         <p class="fine">Everything runs on this device. Nothing from the camera is uploaded or saved unless you press Snapshot or Record.</p>
         <p class="hint" id="splashHint"></p>
@@ -117,5 +118,6 @@
   </main>
 
   <script type="module" src="js/app.js"></script>
+  <script src="js/core/failsafe.js"></script>
 </body>
 </html>

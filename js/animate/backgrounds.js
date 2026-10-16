@@ -102,7 +102,9 @@ export const SCENES = [
   { id: 'night', label: 'Night sky', draw: night },
   { id: 'sea', label: 'Under the sea', draw: sea },
   { id: 'stage', label: 'Stage', draw: stage },
-  { id: 'colour', label: 'Plain colour' },
+  { id: 'green', label: 'Green screen', key: true },
+  { id: 'transparent', label: 'Transparent', key: true },
+  { id: 'colour', label: 'Plain colour', key: true },
   { id: 'picture', label: 'My picture' },
   { id: 'camera', label: 'Camera' },
 ];
