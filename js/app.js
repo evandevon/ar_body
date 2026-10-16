@@ -10,7 +10,6 @@ const mediaProgress = createProgress();
 let tracker; // module js/core/tracker.js once loaded
 
 // ---------------------------------------------------------------- config
-const KEY_MAX = 480; // max size (px) of green-screen processing, keeps it fast
 
 // ---------------------------------------------------------------- elements
 const $ = s => document.querySelector(s);
@@ -151,7 +150,7 @@ function kindOf(type, src) {
 }
 
 // Websites that allow sharing (CORS) load normally. Others still show, but the browser then
-// blocks snapshots, recording and green-screen for safety — we remember that as "tainted".
+// blocks snapshots and recording for safety — we remember that as "tainted".
 async function withCorsFallback(src, load) {
   if (!isRemote(src)) return load(false);
   try { return await load(true); }
@@ -212,7 +211,7 @@ async function loadGif(src) {
 
 // ---------------------------------------------------------------- overlays
 let nextId = 1;
-const DEFAULTS = { anchor: 'head', size: 1, x: 0, y: 0, rot: 0, opacity: 1, follow: true, flip: false, key: false, keyStrength: 0.5 };
+const DEFAULTS = { anchor: 'head', size: 1, x: 0, y: 0, rot: 0, opacity: 1, follow: true, flip: false, visible: true };
 
 const nameFromUrl = src => {
   try { const u = new URL(src); return decodeURIComponent(u.pathname.split('/').filter(Boolean).pop() || u.hostname); }
@@ -232,10 +231,9 @@ async function addOverlay({ src, settings = {} }) {
   }
   const o = { id: nextId++, src, name, kind, media, ...DEFAULTS, ...settings };
   if (!ANCHOR_BY_ID[o.anchor]) o.anchor = DEFAULTS.anchor;
-  o.keyCanvas = document.createElement('canvas');
-  o.keyStamp = null;
   state.overlays.push(o);
   renderCard(o);
+  if (!applying) openCard(o);
   updateEmpty();
   saveToLink();
   return o;
@@ -272,40 +270,6 @@ function currentFrame(o, now) {
   return { img: m.el, w: m.w, h: m.h, stamp: 0 };
 }
 
-// Simple green-screen: makes strongly green pixels transparent.
-function chromaKey(o, f) {
-  const stamp = `${f.stamp}|${o.keyStrength}`;
-  if (o.keyStamp === stamp) return o.keyCanvas;
-  const s = Math.min(1, KEY_MAX / Math.max(f.w, f.h));
-  const w = Math.max(1, Math.round(f.w * s)), h = Math.max(1, Math.round(f.h * s));
-  const c = o.keyCanvas;
-  if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
-  const g = c.getContext('2d', { willReadFrequently: true });
-  g.clearRect(0, 0, w, h);
-  g.drawImage(f.img, 0, 0, w, h);
-  let data;
-  try { data = g.getImageData(0, 0, w, h); }
-  catch {
-    o.key = false;
-    if (o.card) o.card.querySelector('[data-k="key"]').checked = false;
-    setStatus(`Green screen can’t be used on “${o.name}” because of where it’s hosted. Download it and add the file instead.`, { error: true });
-    return f.img;
-  }
-  const p = data.data;
-  const t0 = 8 + (1 - o.keyStrength) * 70, t1 = t0 + 45;
-  for (let i = 0; i < p.length; i += 4) {
-    const r = p[i], gr = p[i + 1], b = p[i + 2];
-    const mx = r > b ? r : b;
-    const diff = gr - mx;
-    if (diff > t0 * 0.5) {
-      p[i + 1] = mx; // remove green spill
-      if (diff > t0) p[i + 3] = diff >= t1 ? 0 : p[i + 3] * (1 - (diff - t0) / (t1 - t0));
-    }
-  }
-  g.putImageData(data, 0, 0);
-  o.keyStamp = stamp;
-  return c;
-}
 
 // ---------------------------------------------------------------- overlay cards (UI)
 function anchorSelect() {
@@ -328,7 +292,6 @@ const SLIDERS = [
 const CHECKS = [
   { k: 'follow', label: 'Tilt with body' },
   { k: 'flip', label: 'Flip' },
-  { k: 'key', label: 'Remove green screen' },
 ];
 
 function renderCard(o) {
@@ -340,10 +303,35 @@ function renderCard(o) {
   head.className = 'card-head';
   const thumb = o.kind === 'video' ? Object.assign(document.createElement('video'), { muted: true, src: o.src, preload: 'metadata', playsInline: true }) : Object.assign(new Image(), { src: o.src, alt: '' });
   thumb.className = 'thumb';
+  // eye: quick show/hide (saved in the link)
+  const eye = document.createElement('button');
+  eye.type = 'button'; eye.className = 'icon-btn eye';
+  eye.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path class="open" d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle class="open" cx="12" cy="12" r="3"/><path class="shut" d="M3 3l18 18M10.6 5.1A9.8 9.8 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6A17 17 0 0 0 2 12s3.6 7 10 7a9.6 9.6 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>`;
+  const syncEye = () => {
+    eye.setAttribute('aria-pressed', String(!o.visible));
+    eye.setAttribute('aria-label', `${o.visible ? 'Hide' : 'Show'} ${o.name}`);
+    eye.title = o.visible ? 'Hide' : 'Show';
+    li.classList.toggle('hidden-layer', !o.visible);
+  };
+  eye.onclick = () => { o.visible = !o.visible; syncEye(); saveToLink(); };
+  // the name (with picture) opens and closes the layer's settings
+  const toggle = document.createElement('button');
+  toggle.type = 'button'; toggle.className = 'card-toggle';
+  toggle.setAttribute('aria-expanded', 'false');
+  toggle.setAttribute('aria-controls', `${uid}-body`);
   const title = document.createElement('span');
   title.className = 'name';
   title.textContent = o.name;
-  title.title = o.name;
+  const where = document.createElement('span');
+  where.className = 'where';
+  const syncWhere = () => (where.textContent = ANCHOR_BY_ID[o.anchor]?.label.replace(/ \(.*\)/, '') ?? '');
+  syncWhere();
+  const words = document.createElement('span');
+  words.className = 'words';
+  words.append(title, where);
+  toggle.title = `${o.name} — show or hide settings`;
+  toggle.append(thumb, words);
+  toggle.onclick = () => openCard(li.classList.contains('open') ? null : o);
   const btns = document.createElement('div');
   btns.className = 'card-btns';
   const mk = (txt, label, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'icon-btn'; b.textContent = txt; b.setAttribute('aria-label', `${label} ${o.name}`); b.title = label; b.onclick = fn; btns.append(b); };
@@ -351,10 +339,12 @@ function renderCard(o) {
   mk('↓', 'Move back', () => moveOverlay(o, -1));
   mk('⧉', 'Duplicate', () => duplicateOverlay(o));
   mk('✕', 'Remove', () => removeOverlay(o));
-  head.append(thumb, title, btns);
+  btns.lastChild.classList.add('remove');
+  head.append(eye, toggle, btns);
 
   const body = document.createElement('div');
   body.className = 'card-body';
+  body.id = `${uid}-body`;
 
   const aWrap = document.createElement('label');
   aWrap.className = 'row';
@@ -362,7 +352,7 @@ function renderCard(o) {
   const sel = anchorSelect();
   sel.value = o.anchor;
   sel.dataset.k = 'anchor';
-  sel.onchange = () => (o.anchor = sel.value);
+  sel.onchange = () => { o.anchor = sel.value; syncWhere(); };
   aWrap.append(sel);
   body.append(aWrap);
 
@@ -388,36 +378,38 @@ function renderCard(o) {
     const lab = document.createElement('label');
     const cb = Object.assign(document.createElement('input'), { type: 'checkbox', checked: o[c.k] });
     cb.dataset.k = c.k;
-    cb.onchange = () => { o[c.k] = cb.checked; keyRow.hidden = !o.key; };
+    cb.onchange = () => { o[c.k] = cb.checked; };
     lab.append(cb, ` ${c.label}`);
     checks.append(lab);
   }
   body.append(checks);
 
-  const keyRow = document.createElement('div');
-  keyRow.className = 'row slider';
-  keyRow.innerHTML = `<label for="${uid}-ks">Green removal strength</label>`;
-  const ks = Object.assign(document.createElement('input'), { type: 'range', id: `${uid}-ks`, min: 0, max: 1, step: 0.05, value: o.keyStrength });
-  ks.oninput = () => (o.keyStrength = +ks.value);
-  keyRow.append(ks);
-  keyRow.hidden = !o.key;
-  body.append(keyRow);
 
   li.append(head);
   if (!o.media || o.media.tainted) {
     const note = document.createElement('p');
     note.className = 'card-note' + (o.media ? '' : ' bad');
     note.textContent = o.media
-      ? 'This website doesn’t allow sharing, so snapshots, recording and green screen won’t work while it’s showing.'
+      ? 'This website doesn’t allow sharing, so snapshots and recording won’t work while it’s showing.'
       : 'Couldn’t load this address. It needs to go straight to a picture or video file.';
     li.append(note);
-    if (o.media) { const k = body.querySelector('[data-k="key"]'); k.disabled = true; k.checked = o.key = false; keyRow.hidden = true; }
   }
   li.append(body);
   li.addEventListener('input', () => saveToLink());
   li.addEventListener('change', () => saveToLink());
   o.card = li;
+  syncEye();
   list.prepend(li); // top of list = front-most layer
+}
+
+/** Opens one layer's settings and closes the rest (null closes all). */
+function openCard(o) {
+  for (const x of state.overlays) {
+    const open = x === o;
+    x.card?.classList.toggle('open', open);
+    x.card?.querySelector('.card-toggle')?.setAttribute('aria-expanded', String(open));
+  }
+  if (o) o.card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
 function moveOverlay(o, dir) {
@@ -442,21 +434,39 @@ const pickSettings = o => Object.fromEntries(Object.keys(DEFAULTS).map(k => [k, 
 // ---------------------------------------------------------------- layout stored in the link
 // The whole layout lives after the # in the address: #l=<compressed settings>.
 // Only web addresses of the pictures/videos are stored, so the link works anywhere.
-const SHORT = { anchor: 'a', size: 's', x: 'x', y: 'y', rot: 'r', opacity: 'o', follow: 'f', flip: 'm', key: 'k', keyStrength: 'ks' };
+const SHORT = { anchor: 'a', size: 's', x: 'x', y: 'y', rot: 'r', opacity: 'o', follow: 'f', flip: 'm', visible: 'vi' };
 const LONG = Object.fromEntries(Object.entries(SHORT).map(([k, v]) => [v, k]));
 const round = v => (typeof v === 'number' ? Math.round(v * 1000) / 1000 : v);
 
+const entryOf = (src, settings) => {
+  const e = { u: src };
+  for (const [k, sk] of Object.entries(SHORT)) {
+    const v = settings[k] ?? DEFAULTS[k];
+    if (v !== DEFAULTS[k]) e[sk] = typeof v === 'boolean' ? +v : round(v);
+  }
+  return e;
+};
 function serialise() {
+  return { v: 1, p: state.numPoses, q: state.model, o: state.overlays.map(o => entryOf(o.src, o)) };
+}
+/** The layout a link/pack describes, in the same form as serialise(), without loading it. */
+function normalise(data) {
   return {
     v: 1,
-    p: state.numPoses,
-    q: state.model,
-    o: state.overlays.map(o => {
-      const e = { u: o.src };
-      for (const [k, sk] of Object.entries(SHORT)) if (o[k] !== DEFAULTS[k]) e[sk] = typeof o[k] === 'boolean' ? +o[k] : round(o[k]);
-      return e;
-    }),
+    p: [1, 2, 3, 4].includes(data.p) ? data.p : state.numPoses,
+    q: ['lite', 'full', 'heavy'].includes(data.q) ? data.q : state.model,
+    o: (data.o || []).filter(e => typeof e?.u === 'string' && /^https?:/i.test(e.u)).map(e => entryOf(e.u, parseEntry(e))),
   };
+}
+function parseEntry(e) {
+  const settings = {};
+  for (const [sk, val] of Object.entries(e)) {
+    const k = LONG[sk];
+    if (!k) continue;
+    settings[k] = typeof DEFAULTS[k] === 'boolean' ? !!val : typeof DEFAULTS[k] === 'number' ? (Number.isFinite(+val) ? +val : DEFAULTS[k]) : String(val);
+  }
+  if (settings.anchor && !ANCHOR_BY_ID[settings.anchor]) settings.anchor = DEFAULTS.anchor;
+  return settings;
 }
 
 const toB64u = bytes => { let s = ''; for (const b of bytes) s += String.fromCharCode(b); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
@@ -482,7 +492,9 @@ function saveToLink() {
 }
 async function writeLink() {
   clearTimeout(saveTimer);
-  const hash = '#l=' + (await encodeLayout(serialise()));
+  const hash = state.pack && signature() === state.pack.sig
+    ? `#pack=${state.pack.id}`
+    : '#l=' + (await encodeLayout(state.pack ? { ...serialise(), pk: state.pack.id } : serialise()));
   if (hash !== location.hash) history.replaceState(null, '', location.pathname + location.search + hash);
   lastHash = hash;
 }
@@ -504,13 +516,7 @@ async function applyLayout(data) {
       if (list.length > 2) mediaProgress.set('Loading overlays…', done / list.length, `${done} of ${list.length}`);
       done++;
       if (typeof e?.u !== 'string' || !/^https?:\/\//i.test(e.u)) continue;
-      const settings = {};
-      for (const [sk, val] of Object.entries(e)) {
-        const k = LONG[sk];
-        if (!k) continue;
-        settings[k] = typeof DEFAULTS[k] === 'boolean' ? !!val : typeof DEFAULTS[k] === 'number' ? (Number.isFinite(+val) ? +val : DEFAULTS[k]) : String(val);
-      }
-      await addOverlay({ src: e.u, settings });
+      await addOverlay({ src: e.u, settings: parseEntry(e) });
     }
   } finally {
     mediaProgress.done();
@@ -518,35 +524,71 @@ async function applyLayout(data) {
   }
 }
 
-// Built-in examples use pictures hosted on this same site (the assets folder).
-const asset = f => new URL(`assets/${f}`, location.href).href;
-const EXAMPLES = {
-  crown: () => ({ v: 1, o: [
-    { u: asset('crown.svg'), a: 'hat' },
-    { u: asset('sunglasses.svg'), a: 'eyes' },
-    { u: asset('sparkle.svg'), a: 'lHand', s: 0.8, f: 0 },
-    { u: asset('sparkle.svg'), a: 'rHand', s: 0.8, f: 0 },
-  ] }),
-  skeleton: () => ({ v: 1, o: [
-    { u: asset('bone.svg'), a: 'spine', s: 0.9 },
-    { u: asset('pelvis.svg'), a: 'hips', s: 0.95 },
-    { u: asset('ribcage.svg'), a: 'chest', s: 1.3, y: -0.3 },
-    ...['lUpperArm', 'lForearm', 'rUpperArm', 'rForearm', 'lThigh', 'lShin', 'rThigh', 'rShin'].map(a => ({ u: asset('bone.svg'), a })),
-    { u: asset('skull.svg'), a: 'head', s: 0.75 },
-  ] }),
-};
-const exampleLayout = EXAMPLES.crown;
+// ---------------------------------------------------------------- packs (short links)
+// Packs are files in the site's packs/ folder. #pack=skeleton opens packs/skeleton.json — a short
+// link that makes a simple QR code. While the layout still matches the pack, the address stays
+// short; any change switches it to the full #l= link (and undoing the change switches back).
+const SITE = new URL('.', location.href);
+const packUrl = id => new URL(`packs/${id}.json`, SITE).href;
+const validId = id => /^[a-z0-9][a-z0-9_-]{0,60}$/i.test(id || '');
+state.pack = null; // { id, sig } of the pack currently loaded
 
-async function loadExample(name) {
-  if (state.overlays.length && !confirm('Replace the current overlays with this example?')) return;
-  await applyLayout(EXAMPLES[name]());
+/** Turns a pack file's picture paths ("assets/bone.svg") into full addresses. */
+function resolvePack(data) {
+  return { ...data, o: (data.o || []).map(e => ({ ...e, u: new URL(e.u, SITE).href })) };
+}
+const signature = () => JSON.stringify(serialise());
+
+async function fetchPack(id) {
+  const r = await fetch(packUrl(id), { cache: 'no-cache' });
+  if (!r.ok) throw new Error(`pack ${id}: ${r.status}`);
+  return resolvePack(await r.json());
+}
+
+async function openPack(id, { ask = true } = {}) {
+  if (!validId(id)) return false;
+  if (ask && state.overlays.length && !confirm('Replace the current overlays with this pack?')) return false;
+  let data;
+  try { data = await fetchPack(id); }
+  catch (e) { console.error(e); setStatus(`The “${id}” pack couldn’t be found. Check packs/${id}.json is on the website.`, { error: true, sticky: true }); return false; }
+  await applyLayout(data);
+  state.pack = { id, sig: signature() };
   await writeLink();
+  return true;
+}
+
+async function buildPackButtons() {
+  const wrap = $('#packList');
+  let packs = [];
+  try {
+    const r = await fetch(new URL('packs/index.json', SITE), { cache: 'no-cache' });
+    if (r.ok) packs = (await r.json()).packs || [];
+  } catch {}
+  if (!packs.length) packs = [{ id: 'crown', name: 'Crown & sparkles' }, { id: 'skeleton', name: 'Skeleton' }];
+  wrap.innerHTML = '';
+  for (const p of packs) {
+    if (!validId(p.id)) continue;
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'btn small';
+    b.textContent = p.name || p.id;
+    b.onclick = () => openPack(p.id);
+    wrap.append(b);
+  }
 }
 
 async function loadFromLink() {
-  const str = new URLSearchParams(location.hash.slice(1)).get('l');
-  if (str == null) { await applyLayout(exampleLayout()); await writeLink(); return; }
-  try { await applyLayout(await decodeLayout(str)); lastHash = location.hash; }
+  const params = new URLSearchParams(location.hash.slice(1));
+  const str = params.get('l'), pack = params.get('pack');
+  if (pack) { if (!(await openPack(pack, { ask: false }))) await applyLayout({ o: [] }); lastHash = location.hash; return; }
+  if (str == null) { await openPack('crown', { ask: false }); return; }
+  try {
+    const data = await decodeLayout(str);
+    await applyLayout(data);
+    state.pack = null;
+    lastHash = location.hash;
+    // a changed pack: remember the pack, so undoing the changes brings back its short link
+    if (validId(data.pk)) fetchPack(data.pk).then(pk => { state.pack = { id: data.pk, sig: JSON.stringify(normalise(pk)) }; }).catch(() => {});
+  }
   catch (e) { console.error(e); setStatus('This link’s layout couldn’t be read — it may have been cut short when copied.', { error: true, sticky: true }); }
 }
 
@@ -554,6 +596,63 @@ async function copyLink() {
   await writeLink();
   try { await navigator.clipboard.writeText(location.href); setStatus('Link copied — paste it anywhere to share this layout'); }
   catch { prompt('Copy this link:', location.href); }
+}
+
+/** Downloads the current layout as a pack file for the packs/ folder. */
+function savePackFile() {
+  const data = serialise();
+  // pictures on this website are saved as paths, so the pack works wherever the site is hosted
+  data.o = data.o.map(e => {
+    const u = new URL(e.u);
+    return u.origin === location.origin && u.pathname.startsWith(SITE.pathname) ? { ...e, u: decodeURIComponent(u.pathname.slice(SITE.pathname.length)) } : e;
+  });
+  const name = prompt('Name for this pack (shown on the Packs button):', state.pack?.id || 'My pack');
+  if (name == null) return;
+  const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'my-pack';
+  const file = { name, ...data };
+  const blob = new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' });
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `${id}.json` });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  setStatus(`Saved ${id}.json — put it in the website’s packs/ folder and add { "id": "${id}", "name": "${name.replace(/"/g, '')}" } to packs/index.json. Its link: tracker.html#pack=${id}`, { sticky: true });
+}
+
+// ---------------------------------------------------------------- QR code
+let qrLib;
+function loadQrLib() {
+  qrLib ??= new Promise((resolve, reject) => {
+    const sc = document.createElement('script');
+    sc.src = new URL('vendor/qrcode/qrcode.js', SITE).href;
+    sc.onload = () => (window.qrcode ? resolve(window.qrcode) : reject(new Error('qrcode missing')));
+    sc.onerror = () => { qrLib = null; reject(new Error('qrcode failed')); };
+    document.head.append(sc);
+  });
+  return qrLib;
+}
+async function showQr() {
+  await writeLink();
+  const url = location.href;
+  let qrcode;
+  try { qrcode = await loadQrLib(); }
+  catch { setStatus('The QR code maker didn’t load — check vendor/qrcode/ is on the website.', { error: true }); return; }
+  const qr = qrcode(0, 'M');
+  qr.addData(url, 'Byte');
+  qr.make();
+  const n = qr.getModuleCount();
+  const c = $('#qrCanvas'), cell = Math.max(4, Math.floor(720 / (n + 8)));
+  c.width = c.height = (n + 8) * cell;
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = '#000';
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (qr.isDark(y, x)) g.fillRect((x + 4) * cell, (y + 4) * cell, cell, cell);
+  $('#qrUrl').textContent = url;
+  const short = !!state.pack && location.hash.startsWith('#pack=');
+  $('#qrNote').textContent = short
+    ? 'A short pack link — this QR code scans easily, even from across the room.'
+    : n > 57 ? 'This link holds the whole layout, so the QR code is dense and needs a close, steady scan. For an easy scan, save the layout as a pack file and share its pack link.'
+    : 'This link holds the whole layout. For an even simpler QR code, save the layout as a pack file.';
+  $('#qrSheet').hidden = false;
+  $('#qrClose').focus();
 }
 
 // ---------------------------------------------------------------- tracking + drawing
@@ -568,30 +667,41 @@ function updatePeople() {
     const target = computeAnchors(lm, W, H, state.mirror);
     for (const [id, t] of Object.entries(target)) {
       const s = person[id];
-      if (!s || s.vis < 0.05) { person[id] = { ...t }; continue; }
+      if (!s || s.vis < 0.05) { person[id] = { ...t, full: t.len ? Math.max(t.len / t.scale, (BONE_PRIOR[id] || 0) * 0.8) : 0 }; continue; }
       s.x += (t.x - s.x) * k;
       s.y += (t.y - s.y) * k;
       s.scale += (t.scale - s.scale) * k;
       if (t.len) s.len += (t.len - s.len) * k;
       s.angle += angleDiff(s.angle, t.angle) * k;
       s.vis += (t.vis - s.vis) * Math.max(k, 0.3);
+      // Remember each bone's full length (relative to body size). When it looks shorter while
+      // the body stays the same size, the limb is pointing toward/away from the camera.
+      if (t.len && s.vis > 0.5) s.full = Math.max(s.len / s.scale, (s.full || 0) * 0.9993, (BONE_PRIOR[id] || 0) * 0.8);
     }
   }
   state.people.length = state.numPoses;
 }
 
 const fade = v => Math.min(1, Math.max(0, (v - 0.35) / 0.3));
+// typical bone length as a multiple of shoulder width, so tilting works from the first moment
+const BONE_PRIOR = { lUpperArm: 0.8, rUpperArm: 0.8, lForearm: 0.7, rForearm: 0.7, lThigh: 1.05, rThigh: 1.05, lShin: 1.05, rShin: 1.05, spine: 1.3 };
 
 function drawOverlay(o, a, now) {
-  if (!o.media) return;
+  if (!o.media || !o.visible) return;
   const alpha = o.opacity * fade(a.vis);
   if (alpha < 0.01) return;
   const f = currentFrame(o, now);
   if (f.ready === false || !f.w || !f.h) return;
-  const img = o.key ? chromaKey(o, f) : f.img;
+  const img = f.img;
   const def = ANCHOR_BY_ID[o.anchor];
   let w, h;
-  if (def.bone) { h = def.size * o.size * a.len; w = h * (f.w / f.h); } // stretch along the bone
+  if (def.bone) {
+    // full-length picture, squashed only along the bone when the limb points toward the camera —
+    // like a card tilting in depth, instead of the whole picture shrinking
+    const fullLen = Math.max(a.len, (a.full || 0) * a.scale);
+    w = def.size * o.size * fullLen * (f.w / f.h);
+    h = def.size * o.size * a.len;
+  }
   else { w = def.size * o.size * a.scale; h = w * (f.h / f.w); }
   ctx.save();
   ctx.translate(a.x, a.y);
@@ -786,7 +896,18 @@ $('#urlForm').onsubmit = async e => {
   if (inp.value.trim() && (await addFromAddress(inp.value))) inp.value = '';
 };
 $('#copyLinkBtn').onclick = copyLink;
-document.querySelectorAll('[data-example]').forEach(b => (b.onclick = () => loadExample(b.dataset.example)));
+buildPackButtons();
+$('#qrBtn').onclick = showQr;
+$('#savePackBtn').onclick = savePackFile;
+$('#qrClose').onclick = () => { $('#qrSheet').hidden = true; $('#qrBtn').focus(); };
+$('#qrCopy').onclick = copyLink;
+$('#qrDownload').onclick = () => $('#qrCanvas').toBlob(b => {
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(b), download: `ar-body-qr${state.pack ? '-' + state.pack.id : ''}.png` });
+  document.body.append(a); a.click(); a.remove();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#qrSheet').hidden) $('#qrClose').click(); });
+// clicking the camera picture closes any open layer settings
+$('#view').addEventListener('pointerdown', () => openCard(null));
 $('#clearBtn').onclick = () => { if (confirm('Remove all overlays?')) { [...state.overlays].forEach(o => removeOverlay(o, { save: false })); saveToLink(); } };
 
 $('#model').onchange = e => { state.model = e.target.value; loadModel(); saveToLink(); };

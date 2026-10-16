@@ -1,5 +1,8 @@
 # Changelog
 
+## v9
+- AR Body Tracker: removed the *Remove green screen* option from layers (old links that used it still open).
+
 ## v8
 - AR Overlays and the planned Body Explorer are merged into **AR Body Tracker** (`tracker.html`). Old `overlays.html` links and QR codes still work.
 - "Animate my drawing" is now **AR drawing animation**.
