@@ -1,5 +1,13 @@
 # Changelog
 
+## v8
+- AR Overlays and the planned Body Explorer are merged into **AR Body Tracker** (`tracker.html`). Old `overlays.html` links and QR codes still work.
+- "Animate my drawing" is now **AR drawing animation**.
+- **Packs**: layouts stored as files in `packs/`, opened with short links (`tracker.html#pack=skeleton`) that make simple QR codes. *Save as pack file…* creates one.
+- **QR code** button for the current layout.
+- Layers: an **eye** to show/hide each one (saved in the link); only one layer's settings open at a time; clicking the camera picture closes them; each layer shows what it's stuck to.
+- Bones tilt in depth (squash along their length, keeping their width) when a limb points toward the camera, instead of shrinking.
+
 ## v7
 - Progress bars with percentages for anything slow: downloading the body tracker (Animate starts it early, on the Background step), finding the character in a photo, preparing the character, animated GIFs and shared layouts in AR Overlays.
 - Animate: the numbered steps at the top are now buttons — jump to any step once there's a drawing.

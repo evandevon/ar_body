@@ -1,0 +1,7 @@
+{
+  "about": "The packs shown in AR Body Tracker. To add one: put a pack file in this folder (copy one of these), then add a line here. Open it with tracker.html#pack=<id>.",
+  "packs": [
+    { "id": "crown", "name": "Crown & sparkles" },
+    { "id": "skeleton", "name": "Skeleton" }
+  ]
+}

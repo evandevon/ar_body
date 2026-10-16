@@ -1,0 +1,10 @@
+{
+  "name": "Crown & sparkles",
+  "about": "Picture addresses can be full web addresses, or paths inside this website such as assets/crown.svg.",
+  "o": [
+    { "u": "assets/crown.svg", "a": "hat" },
+    { "u": "assets/sunglasses.svg", "a": "eyes" },
+    { "u": "assets/sparkle.svg", "a": "lHand", "s": 0.8, "f": 0 },
+    { "u": "assets/sparkle.svg", "a": "rHand", "s": 0.8, "f": 0 }
+  ]
+}

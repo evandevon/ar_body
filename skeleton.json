@@ -1,0 +1,17 @@
+{
+  "name": "Skeleton",
+  "o": [
+    { "u": "assets/bone.svg", "a": "spine", "s": 0.9 },
+    { "u": "assets/pelvis.svg", "a": "hips", "s": 0.95 },
+    { "u": "assets/ribcage.svg", "a": "chest", "s": 1.3, "y": -0.3 },
+    { "u": "assets/bone.svg", "a": "lUpperArm" },
+    { "u": "assets/bone.svg", "a": "lForearm" },
+    { "u": "assets/bone.svg", "a": "rUpperArm" },
+    { "u": "assets/bone.svg", "a": "rForearm" },
+    { "u": "assets/bone.svg", "a": "lThigh" },
+    { "u": "assets/bone.svg", "a": "lShin" },
+    { "u": "assets/bone.svg", "a": "rThigh" },
+    { "u": "assets/bone.svg", "a": "rShin" },
+    { "u": "assets/skull.svg", "a": "head", "s": 0.75 }
+  ]
+}
