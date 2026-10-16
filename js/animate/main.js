@@ -1,9 +1,9 @@
-import { findCharacter, paperMap, applyEdits, cutOut, maskFromAlpha } from './cutout.js';
-import { JOINTS, LINKS, guessJoints, buildRig, Puppet, readPerformer } from './rig.js';
-import { PuppetRenderer } from './renderer.js';
-import { SCENES, drawCover } from './backgrounds.js';
-import { saveCharacter, listCharacters, deleteCharacter, getCharacter } from './storage.js';
-import { openCamera, stopStream, cameraErrorMessage, deviceList, waitForFrames, openMic, micErrorMessage, levelMeter } from '../core/camera.js';
+import { findCharacter, paperMap, applyEdits, cutOut, maskFromAlpha } from './cutout.js?v=af729520';
+import { JOINTS, LINKS, guessJoints, buildRig, Puppet, readPerformer } from './rig.js?v=bc1498b1';
+import { PuppetRenderer } from './renderer.js?v=b2e675e8';
+import { SCENES, drawCover } from './backgrounds.js?v=b50d8b94';
+import { saveCharacter, listCharacters, deleteCharacter, getCharacter } from './storage.js?v=53955991';
+import { openCamera, stopStream, cameraErrorMessage, deviceList, waitForFrames, openMic, micErrorMessage, levelMeter } from '../core/camera.js?v=2afbfead';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -121,6 +121,85 @@ for (const id of ['#photoInput', '#fileInput']) {
   };
 }
 $('#exampleBtn').onclick = () => loadPhoto('assets/example-drawing.jpg');
+
+// ---- "Take a photo": the phone's own camera app on phones, a live webcam view on computers
+$('#photoBtn').onclick = () => (isPhone ? $('#photoInput').click() : openPhotoSheet());
+const photoVideo = $('#photoVideo');
+const photo = { stream: null, rotate: 0, raf: 0, camId: '', token: 0 };
+try { photo.camId = localStorage.getItem('photo-cam') || ''; photo.rotate = +(localStorage.getItem('photo-rotate') || 0); } catch {}
+
+async function startPhotoCamera() {
+  const token = ++photo.token;
+  stopStream(photo.stream); photo.stream = null;
+  $('#photoMsg').textContent = 'Starting camera…';
+  try {
+    // higher resolution than performing: drawings have fine lines
+    const r = await openCamera(photoVideo, { deviceId: photo.camId, facing: 'environment' });
+    if (token !== photo.token) { stopStream(r.stream); return; }
+    photo.stream = r.stream;
+    photo.camId = r.deviceId || '';
+    try { localStorage.setItem('photo-cam', photo.camId); } catch {}
+    await r.stream.getVideoTracks()[0]?.applyConstraints({ width: { ideal: 1920 }, height: { ideal: 1080 } }).catch(() => {});
+    photoCams.refresh();
+    $('#photoMsg').textContent = (await waitForFrames(photoVideo)) ? '' : 'The camera is on but not sending a picture. Close other apps using it, or choose another camera.';
+  } catch (e) {
+    console.error(e);
+    if (token !== photo.token) return;
+    $('#photoMsg').textContent = cameraErrorMessage(e) + ' You can also use “Choose a picture”.';
+    photoCams.refresh();
+  }
+}
+const photoCams = deviceList($('#photoCam'), {
+  kind: 'videoinput',
+  getCurrent: () => photo.stream?.getVideoTracks()[0]?.getSettings().deviceId || photo.camId,
+  onChange: id => { photo.camId = id; startPhotoCamera(); },
+});
+
+function drawPhotoFrame(target, v) {
+  const rot = ((photo.rotate % 360) + 360) % 360, side = rot % 180 !== 0;
+  const w = side ? v.videoHeight : v.videoWidth, h = side ? v.videoWidth : v.videoHeight;
+  if (target.width !== w || target.height !== h) { target.width = w; target.height = h; }
+  const g = target.getContext('2d');
+  g.save();
+  g.translate(w / 2, h / 2);
+  g.rotate((rot * Math.PI) / 180);
+  g.drawImage(v, -v.videoWidth / 2, -v.videoHeight / 2); // not mirrored, so writing reads the right way
+  g.restore();
+}
+
+function openPhotoSheet() {
+  $('#photoSheet').hidden = false;
+  startPhotoCamera();
+  const loop = () => {
+    if ($('#photoSheet').hidden) return;
+    photo.raf = requestAnimationFrame(loop);
+    if (photoVideo.readyState >= 2 && photoVideo.videoWidth) drawPhotoFrame($('#photoCanvas'), photoVideo);
+  };
+  cancelAnimationFrame(photo.raf);
+  loop();
+  $('#photoShoot').focus();
+}
+function closePhotoSheet() {
+  $('#photoSheet').hidden = true;
+  cancelAnimationFrame(photo.raf);
+  photo.token++;
+  stopStream(photo.stream); photo.stream = null;
+  photoVideo.srcObject = null;
+  $('#photoBtn').focus();
+}
+$('#photoCancel').onclick = closePhotoSheet;
+$('#photoRotate').onclick = () => { photo.rotate = (photo.rotate + 90) % 360; try { localStorage.setItem('photo-rotate', photo.rotate); } catch {} };
+$('#photoShoot').onclick = async () => {
+  if (!(photoVideo.readyState >= 2 && photoVideo.videoWidth)) { toast('The camera isn’t showing a picture yet.', { error: true }); return; }
+  const shot = document.createElement('canvas');
+  drawPhotoFrame(shot, photoVideo);
+  $('#photoCanvas').classList.add('flash-white');
+  setTimeout(() => $('#photoCanvas').classList.remove('flash-white'), 260);
+  const blob = await toBlob(shot, 'image/jpeg', 0.92);
+  closePhotoSheet();
+  if (blob) loadPhoto(URL.createObjectURL(blob));
+};
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#photoSheet').hidden) closePhotoSheet(); });
 
 async function renderSaved() {
   let items = [];
@@ -657,7 +736,7 @@ async function loadTracker() {
   if (S.tracker) return;
   S.trackerLoading ??= (async () => {
     try {
-      tracking ??= await import('../core/tracker.js');
+      tracking ??= await import('../core/tracker.js?v=7b94bb29');
       if (!$('#performHint').dataset.sticky) setHint('Loading body tracker…');
       S.tracker = await tracking.createPoseTracker({ model: 'lite' });
       S.trackerError = null;

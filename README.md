@@ -84,11 +84,27 @@ then open `http://localhost:8000`.
 The camera starts on its own, even if body tracking can't load, and the page says what went wrong:
 
 - **"opened as a file"** — open the page from its web address, not by double-clicking the file.
+- **"Part of this page didn't load"** — refresh with Ctrl+Shift+R (Cmd+Shift+R on a Mac). If it keeps happening, a file is missing from the website: upload all the files from the latest update. The page version is shown on the home page and in the message.
 - **"Camera permission is blocked"** — click the camera/lock icon in the address bar and allow the camera. On a Mac, also allow the browser in System Settings → Privacy & Security → Camera.
 - **"The camera is busy"** / **"not sending a picture"** — another app (Teams, Zoom, Camera) is using it. Close it, or pick another camera.
-- **"Body tracking couldn't load"** — the network is blocking the tracker. The page tries `cdn.jsdelivr.net` first, then `unpkg.com`, and downloads its model from `storage.googleapis.com`. Ask IT to allow them.
+- **"Body tracking couldn't …"** — see *Body tracking files* below.
 
 The camera lists update by themselves when a webcam or document camera is plugged in or out.
+
+## Body tracking files
+
+Body tracking is Google's MediaPipe, released under the Apache License 2.0, which allows hosting it yourself:
+
+- `vendor/mediapipe/` — the tracker library and engine (about 26 MB), bundled with the site, unmodified, with its licence.
+- `models/` — the trained body model. Download the model file(s) into this folder — links and exact names are in `models/README.md`. "Fast" (`pose_landmarker_lite.task`) is the one most people need.
+
+The site uses its own copies first, and only falls back to the internet (cdn.jsdelivr.net / unpkg.com for the library, storage.googleapis.com for the model) for anything missing. With both folders uploaded, the site needs nothing but your github.io address — handy on school networks.
+
+The model card notes the tracker is designed for people within about 4 m of the camera, works best with one person, and does not do — and cannot be used for — identity recognition.
+
+## Updates
+
+Each update comes as a zip of **only the files that changed**, in the same folders. Upload its contents over the top of the repository (GitHub: *Add file → Upload files*, drag in the contents, commit). If an update deletes a file, its notes say which. `CHANGELOG.md` lists every version. Script and style links carry a fingerprint (`?v=…`) of their contents, so browsers never mix old and new files.
 
 ## Notes
 
@@ -107,6 +123,9 @@ js/animate/              Animate: cut-out, rig (mesh + bones), WebGL renderer, s
 js/core/camera.js        shared camera, camera/mic lists, microphone
 js/core/tracker.js       body tracker loader (with backup source)
 js/core/failsafe.js      explains what's wrong if the page can't run
+vendor/mediapipe/        bundled body-tracking library + engine (Apache-2.0)
+models/                  body model files (you add these; see models/README.md)
+CHANGELOG.md             what changed in each version
 assets/                  sample stickers, skeleton pictures, example drawing — host your own here too
 .nojekyll         tells GitHub Pages to serve files as-is
 ```

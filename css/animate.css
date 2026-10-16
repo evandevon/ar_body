@@ -188,3 +188,15 @@ select { min-height: 44px; padding: 6px 10px; background: var(--bg); border: 1px
   .cam-pick { min-width: 0; flex: 0 1 100px; } .cam-pick select { max-width: 100%; width: 100%; min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) { .meter span { transition: none; } }
+
+.sheet-card.wide { width: min(760px, 100%); }
+.photo-frame { position: relative; background: #000; border-radius: 12px; overflow: hidden; aspect-ratio: 4 / 3; display: grid; place-items: center; }
+.photo-frame canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
+.photo-msg { position: absolute; inset: auto 12px 12px; text-align: center; color: #fff; text-shadow: 0 1px 4px #000; }
+.photo-msg:empty { display: none; }
+.photo-tools { display: flex; gap: 8px; margin-top: 10px; }
+.photo-tools .grow { flex: 1; min-width: 0; }
+.photo-tools select { width: 100%; }
+.flash-white { animation: flashw .25s; }
+@keyframes flashw { from { filter: brightness(3); } }
+@media (prefers-reduced-motion: reduce) { .flash-white { animation: none; } }

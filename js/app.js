@@ -1,5 +1,5 @@
-import { ANCHORS, ANCHOR_BY_ID, computeAnchors, angleDiff } from './body.js';
-import { openCamera, stopStream, cameraErrorMessage, deviceList, waitForFrames } from './core/camera.js';
+import { ANCHORS, ANCHOR_BY_ID, computeAnchors, angleDiff } from './body.js?v=10e5e686';
+import { openCamera, stopStream, cameraErrorMessage, deviceList, waitForFrames } from './core/camera.js?v=2afbfead';
 
 // The body tracker downloads from the internet, so it's loaded separately: if a network blocks
 // it, the camera and overlays still work.
@@ -53,7 +53,7 @@ async function loadModel() {
   const token = ++modelToken;
   setStatus('Loading body tracker…', { sticky: true });
   try {
-    tracker ??= await import('./core/tracker.js');
+    tracker ??= await import('./core/tracker.js?v=7b94bb29');
     const lm = await tracker.createPoseTracker({ model: state.model, numPoses: state.numPoses });
     if (token !== modelToken) { lm.close(); return; }
     state.landmarker?.close();

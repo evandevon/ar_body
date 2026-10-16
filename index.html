@@ -6,10 +6,13 @@
   <title>AR Body</title>
   <meta name="description" content="Camera-based body tracking tools for the classroom. Runs in the browser — nothing is uploaded.">
   <meta name="theme-color" content="#101418">
+  <meta name="version" content="v6">
+  <script src="js/core/failsafe.js?v=5d27624d"></script>
   <link rel="icon" href="assets/sparkle.svg" type="image/svg+xml">
   <script>
     // Old shared overlay links (index.html#l=…) now live on overlays.html
     if (/[#&]l=/.test(location.hash)) location.replace('overlays.html' + location.hash);
+    window.__appReady = true;
   </script>
   <style>
     :root { --bg: #101418; --card: #1a2128; --line: #2c3742; --text: #eef2f5; --muted: #9aa8b4; --accent: #ffc83d; color-scheme: dark; }
@@ -30,6 +33,7 @@
     .card p { margin: 0; color: var(--muted); }
     .card.soon { opacity: .55; }
     .tag { align-self: flex-start; font-size: 12px; border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; color: var(--muted); }
+    footer .ver { opacity: .7; }
     footer { margin-top: 28px; color: var(--muted); font-size: 13px; text-align: center; max-width: 560px; }
     @media (prefers-reduced-motion: reduce) { .card { transition: none; } }
   </style>
@@ -59,6 +63,7 @@
       <span class="tag">Coming soon</span>
     </div>
   </main>
-  <footer>Everything runs on this device. The camera picture is never uploaded or saved unless you record or take a snapshot.</footer>
+  <footer>Everything runs on this device. The camera picture is never uploaded or saved unless you record or take a snapshot.<br><span class="ver">Version <span id="ver"></span></span></footer>
+  <script>document.getElementById('ver').textContent = document.querySelector('meta[name="version"]').content;</script>
 </body>
 </html>
