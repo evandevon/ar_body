@@ -1,5 +1,9 @@
 # Changelog
 
+## v12
+- AR drawing animation: **WebM / MP4 / GIF is now chosen in the save window**, after recording, and one recording can be saved in several formats (GIF and MP4 are converted from it).
+- Laptops and desktops download straight away; the share popup is only used on phones and tablets.
+
 ## v11
 - **Transparent WebM fixed for video editors**: recordings are now VP9 (not VP8), and rebuilt before saving with their total length, a seek index and the ALPHA_MODE tag — the same layout FFmpeg produces. (Applies to AR Body Tracker recordings too.)
 - AR drawing animation: **Save as WebM, MP4 or GIF** (Background step). Transparent GIFs keep the see-through background; GIF size and smoothness options; up to 30 s.

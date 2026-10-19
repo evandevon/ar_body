@@ -30,7 +30,7 @@ The numbered steps along the top are buttons: jump to any step once there's a dr
 
 The limb on the left of the camera picture moves the limb on the left of the drawing, so the character moves like the person looks on screen. Body parts the camera can't see (e.g. legs out of frame) relax back to the drawn pose.
 
-**Saving recordings** — on the Background step, *Save as*:
+**Saving recordings** — after recording, the save window has *Save as* WebM / MP4 / GIF. Each recording can be saved in several formats (the other formats are converted from it):
 
 | Format | Best for | See-through? | Sound |
 |---|---|---|---|
@@ -38,7 +38,7 @@ The limb on the left of the camera picture moves the limb on the left of the dra
 | **MP4** | playing anywhere — phones, PowerPoint, Canva | no — a *Transparent* background is saved on green screen | yes |
 | **GIF** | slides, websites, messages; loops forever | yes (edges are fully see-through or solid) | no |
 
-See-through WebMs are saved as VP9 with the transparency layer, total length and a seek index — the same layout FFmpeg makes — so editors import them properly. (Browsers record a "live stream" style file; the page rebuilds it before saving.) MP4 is only offered where the browser can make real H.264 MP4 (Chrome/Edge on Windows, Mac and Chromebooks; Safari). GIFs are made in the background while you record, up to 30 seconds, at the size and smoothness you choose. *Green screen* records the character on bright green for any editor's chroma-key effect. Snapshots (◉) on *Transparent* save as see-through PNGs. Neither background draws the ground shadow, so keying is clean.
+See-through WebMs are saved as VP9 with the transparency layer, total length and a seek index — the same layout FFmpeg makes — so editors import them properly. (Browsers record a "live stream" style file; the page rebuilds it before saving.) MP4 is only offered where the browser can make real H.264 MP4 (Chrome/Edge on Windows, Mac and Chromebooks; Safari). GIFs are made frame by frame from the recording (up to 30 seconds), at the size and smoothness you choose. MP4s converted from a WebM recording take as long as the video to make. On laptops, *Save* downloads the file; on phones and tablets it opens the share sheet (e.g. *Save Video* to Photos). *Green screen* records the character on bright green for any editor's chroma-key effect. Snapshots (◉) on *Transparent* save as see-through PNGs. Neither background draws the ground shadow, so keying is clean.
 
 **Sound:** tick *Record sound from the microphone* in Background (or tap the microphone button while performing) to include sound in the video. It's off by default. The level bar shows the microphone is hearing you; pick a different microphone from the list if needed.
 

@@ -209,3 +209,8 @@ select { min-height: 44px; padding: 6px 10px; background: var(--bg); border: 1px
 .gif-options select { flex: 1; min-width: 0; }
 .result-frame img { display: block; width: 100%; max-height: 60dvh; object-fit: contain; }
 .seg-btn:disabled { opacity: .4; cursor: not-allowed; }
+.save-as { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 14px 0 8px; }
+#formatSeg { display: flex; }
+#formatSeg .seg-btn { flex: 1; }
+.sheet-card { max-height: calc(100dvh - 32px); overflow-y: auto; }
+.sheet.see-through .sheet-card video { background: transparent; }

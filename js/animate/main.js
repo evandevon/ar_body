@@ -687,12 +687,12 @@ function syncSceneUI() {
   $('#pictureRow').hidden = settings.scene !== 'picture';
   const note = $('#bgNote');
   note.textContent = settings.scene === 'transparent'
-    ? (canRecordAlpha() ? 'Videos save as see-through WebM. Not every video editor can read these — use Green screen if yours can’t.' : 'This browser can’t record see-through video. Use Chrome or Edge, or choose Green screen.')
+    ? (canRecordAlpha() ? 'Saved as WebM or GIF, the background stays see-through (you choose when saving). MP4 can’t be see-through, so it gets green screen.' : 'This browser can’t record see-through video. Use Chrome or Edge, or choose Green screen.')
     : settings.scene === 'green' ? 'Remove the green later with your video editor’s chroma key (green screen) effect. Keep green clothes and drawings out of the picture.'
     : '';
   note.hidden = !note.textContent;
   $('.preview').classList.toggle('see-through', settings.scene === 'transparent');
-  syncFormatUI();
+
   $('#bgColour').value = settings.colour;
   $$('[data-inset]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.inset === settings.inset)));
   $$('[data-shape]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.shape === settings.shape)));
@@ -922,7 +922,6 @@ function performLoop(now) {
   const c = $('#stageCanvas');
   const [W, H] = stageSize();
   drawStage(c.getContext('2d'), W, H, now / 1000, positions);
-  S.gifRec?.capture(now);
 
   if (S.tracker && S.cam.stream && !S.recorder && !$('#performHint').dataset.sticky) {
     setHint(now - S.lastSeen > 1200 ? 'Point the camera at the performer — whole body in view works best' : '');
@@ -941,7 +940,10 @@ $('#flipCam').onclick = async () => {
 };
 $('#fullBtn').onclick = () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.().catch(() => {}));
 
-// --- recording: WebM, MP4 or GIF
+// --- recording
+// Performances are recorded once, in the best format this browser can make (see-through VP9
+// WebM on Chrome/Edge, MP4 on Safari). The save window then offers WebM, MP4 and GIF,
+// converting from that recording — so one take can be saved in several formats.
 const isChromium = !!window.chrome || /Edg\//.test(navigator.userAgent);
 const supports = t => !!window.MediaRecorder && MediaRecorder.isTypeSupported(t);
 // See-through video only works as VP9 WebM from Chrome/Edge (other browsers drop the transparency)
@@ -951,9 +953,9 @@ const canWebm = () => supports('video/webm');
 const canMp4 = () => supports('video/mp4;codecs=avc1') || supports('video/mp4;codecs=avc1.42E01E');
 const canGif = () => typeof Worker !== 'undefined';
 const FORMATS = {
-  webm: { label: 'WebM', ok: canWebm, why: 'This browser can’t make WebM videos — choose MP4.' },
-  mp4: { label: 'MP4', ok: canMp4, why: 'This browser can’t make MP4 videos (recent Chrome, Edge and Safari can) — choose WebM.' },
-  gif: { label: 'GIF', ok: canGif, why: 'This browser can’t make GIFs.' },
+  webm: { label: 'WebM', why: 'This browser can’t make WebM videos.' },
+  mp4: { label: 'MP4', why: 'This browser can’t make MP4 videos (recent Chrome, Edge and Safari can).' },
+  gif: { label: 'GIF', why: 'This browser can’t make GIFs.' },
 };
 function pickType(format, withAudio) {
   const list = format === 'mp4'
@@ -962,10 +964,8 @@ function pickType(format, withAudio) {
   const usable = withAudio ? list : list.filter(t => !/opus|mp4a/.test(t));
   return usable.find(supports) || '';
 }
-function currentFormat() {
-  if (FORMATS[settings.format]?.ok()) return settings.format;
-  return Object.keys(FORMATS).find(k => FORMATS[k].ok()) || 'webm';
-}
+/** The format a performance is recorded in. */
+const recordFormat = () => (canWebm() ? 'webm' : canMp4() ? 'mp4' : '');
 
 async function countdown(n) {
   const el = $('#countdown');
@@ -974,71 +974,43 @@ async function countdown(n) {
   el.hidden = true;
 }
 
-// ---- GIF: frames are shrunk and handed to a background worker as they're recorded
-const GIF_MAX_SECONDS = 30;
-function startGif(transparent) {
-  const [W, H] = stageSize();
-  const k = Math.min(1, settings.gifSize / Math.max(W, H));
-  const w = Math.round(W * k), h = Math.round(H * k);
-  const small = document.createElement('canvas');
-  small.width = w; small.height = h;
-  const sg = small.getContext('2d', { willReadFrequently: true });
-  const worker = new Worker(new URL('../core/gif-worker.js?v=9f38500a', import.meta.url), { type: 'module' });
-  worker.postMessage({ type: 'start', width: w, height: h, transparent });
-  const step = 1000 / settings.gifFps;
-  let last = -1, pending = null, t0 = 0, stopped = false;
-  const send = (px, delay) => worker.postMessage({ type: 'frame', data: px.buffer, delay }, [px.buffer]);
-  return {
-    capture(now) {
-      if (stopped || (last >= 0 && now - last < step - 4)) return;
-      if (!t0) t0 = now;
-      sg.clearRect(0, 0, w, h);
-      sg.drawImage($('#stageCanvas'), 0, 0, w, h);
-      const px = sg.getImageData(0, 0, w, h).data;
-      if (pending) send(pending.px, now - pending.t); // each frame lasts until the next one
-      pending = { px, t: now };
-      last = now;
-      if (now - t0 > GIF_MAX_SECONDS * 1000 && S.recorder) { stopped = true; toast(`GIFs stop at ${GIF_MAX_SECONDS} seconds.`); S.recorder.stop(); }
-    },
-    finish() {
-      stopped = true;
-      if (pending) send(pending.px, step);
-      pending = null;
-      return new Promise((resolve, reject) => {
-        worker.onmessage = ({ data: m }) => {
-          if (m.type === 'progress') work.set('Making GIF…', m.total ? m.done / m.total : 0, `Frame ${m.done} of ${m.total}`);
-          if (m.type === 'done') { work.done(); worker.terminate(); resolve(new Blob([m.bytes], { type: 'image/gif' })); }
-        };
-        worker.onerror = e => { work.done(); worker.terminate(); reject(e); };
-        worker.postMessage({ type: 'finish' });
-      });
-    },
-  };
-}
-
 let recBusy = false;
 $('#recBtn').onclick = async () => {
   if (S.recorder) { S.recorder.stop(); return; }
   if (recBusy) return;
   const c = $('#stageCanvas');
-  const format = currentFormat();
-  if (!FORMATS[format].ok()) { toast(FORMATS[format].why, { error: true }); return; }
-  if (format !== 'gif' && (!window.MediaRecorder || !c.captureStream)) { toast('Recording isn’t supported in this browser.', { error: true }); return; }
+  const format = recordFormat();
+  if (!format || !c.captureStream) { toast('Recording isn’t supported in this browser.', { error: true }); return; }
   recBusy = true;
-  const mic = settings.sound && format !== 'gif' ? await ensureMic() : null;
+  const mic = settings.sound ? await ensureMic() : null;
   await countdown(3);
   recBusy = false;
   if (S.step !== 'perform') return;
   const seeThrough = settings.scene === 'transparent';
   if (seeThrough && format === 'webm' && !canRecordAlpha()) toast('This browser can’t record see-through video, so the background will be black. Use Chrome or Edge, or the Green screen background.', { error: true, ms: 7000 });
+  // MP4 can't be see-through: if that's all this browser can record, record on green screen
   const greenForMp4 = seeThrough && format === 'mp4';
   S.greenForMp4 = greenForMp4;
+  const stream = c.captureStream(30);
+  const audioTrack = mic?.getAudioTracks()[0];
+  if (audioTrack) stream.addTrack(audioTrack);
+  const type = pickType(format, !!audioTrack);
+  let rec;
+  try {
+    // a keyframe every second, so editors (and the converter) can jump around the clip quickly
+    rec = new MediaRecorder(stream, type ? { mimeType: type, videoBitsPerSecond: 6e6, audioBitsPerSecond: 128e3, videoKeyFrameIntervalDuration: 1000 } : {});
+  } catch (e) {
+    console.error(e); S.greenForMp4 = false;
+    toast('Recording couldn’t start.', { error: true }); return;
+  }
   const t0 = Date.now();
   const timer = setInterval(() => {
     const s = Math.floor((Date.now() - t0) / 1000);
     $('#recTime').textContent = `● ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   }, 250);
-  const ended = () => {
+  const chunks = [];
+  rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+  rec.onstop = async () => {
     clearInterval(timer);
     S.recorder = null;
     S.greenForMp4 = false;
@@ -1046,88 +1018,218 @@ $('#recBtn').onclick = async () => {
     $('#recBtn').setAttribute('aria-label', 'Start recording');
     $('#recTime').hidden = true;
     $('#micBtn').disabled = false;
-  };
-
-  if (format === 'gif') {
-    const gifRec = startGif(seeThrough);
-    S.gifRec = gifRec;
-    S.recorder = {
-      stop: async () => {
-        if (S.gifRec !== gifRec) return;
-        S.gifRec = null;
-        ended();
-        try { showResult(await gifRec.finish(), 'image/gif', { transparent: seeThrough }); }
-        catch (e) { console.error(e); toast('The GIF couldn’t be made.', { error: true }); }
-      },
-    };
-  } else {
-    const stream = c.captureStream(30);
-    const audioTrack = mic?.getAudioTracks()[0];
-    if (audioTrack) stream.addTrack(audioTrack);
-    const type = pickType(format, !!audioTrack);
-    if (audioTrack && !/opus|mp4a/.test(type)) toast('This browser can’t add sound to this kind of video, so it will be silent. Try WebM for sound.', { ms: 6000 });
-    let rec;
-    try {
-      // a keyframe every second, so editors can jump around the clip smoothly
-      rec = new MediaRecorder(stream, type ? { mimeType: type, videoBitsPerSecond: 6e6, audioBitsPerSecond: 128e3, videoKeyFrameIntervalDuration: 1000 } : {});
-    } catch (e) {
-      console.error(e); clearInterval(timer); S.greenForMp4 = false;
-      toast('Recording couldn’t start.', { error: true }); return;
+    const mime = rec.mimeType || type || 'video/webm';
+    let blob = new Blob(chunks, { type: mime });
+    // browsers write WebM as a live stream; rebuild it into the standard layout editors expect
+    if (mime.includes('webm')) {
+      work.set('Finishing video…', 0.5);
+      await nextPaint();
+      blob = new Blob([fixWebm(new Uint8Array(await blob.arrayBuffer()))], { type: 'video/webm' });
+      work.done();
     }
-    const chunks = [];
-    rec.ondataavailable = e => e.data.size && chunks.push(e.data);
-    rec.onstop = async () => {
-      ended();
-      const mime = rec.mimeType || type || 'video/webm';
-      let blob = new Blob(chunks, { type: mime });
-      // browsers write WebM as a live stream; rebuild it into the standard layout editors expect
-      if (mime.includes('webm')) {
-        work.set('Finishing video…', 0.5);
-        await nextPaint();
-        blob = new Blob([fixWebm(new Uint8Array(await blob.arrayBuffer()))], { type: 'video/webm' });
-        work.done();
-      }
-      showResult(blob, mime, { transparent: seeThrough && mime.includes('webm') && canRecordAlpha(), sound: !!audioTrack, green: greenForMp4 });
-    };
-    try { rec.start(1000); } catch { clearInterval(timer); S.greenForMp4 = false; toast('Recording couldn’t start in this browser', { error: true }); return; }
-    S.recorder = rec;
-  }
+    showResult({
+      blob, mime, source: mime.includes('mp4') ? 'mp4' : 'webm',
+      seeThrough: seeThrough && (mime.includes('mp4') ? false : canRecordAlpha()),
+      wasSeeThrough: seeThrough, green: greenForMp4, sound: !!audioTrack,
+    });
+  };
+  try { rec.start(1000); } catch { clearInterval(timer); S.greenForMp4 = false; toast('Recording couldn’t start in this browser', { error: true }); return; }
+  S.recorder = rec;
   $('#micBtn').disabled = true;
   $('#recBtn').classList.add('recording');
   $('#recBtn').setAttribute('aria-label', 'Stop recording');
   $('#recTime').hidden = false; $('#recTime').textContent = '● 0:00';
 };
 
-let resultFile = null;
-function showResult(blob, mime, { transparent = false, sound = false, green = false } = {}) {
-  const ext = mime.includes('gif') ? 'gif' : mime.includes('mp4') ? 'mp4' : 'webm';
-  const isGif = ext === 'gif';
-  const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
-  resultFile = new File([blob], `my-animation-${transparent ? 'transparent-' : ''}${stamp}.${ext}`, { type: mime.split(';')[0] });
-  $('#resultTitle').textContent = isGif ? 'Your animated GIF' : 'Your animation';
-  $('#resultNote').textContent = transparent && isGif
-    ? 'This GIF has a see-through background. GIFs have no sound, and their edges are either fully see-through or solid.'
-    : transparent
-      ? 'This video has a see-through background (VP9 WebM, the standard kind). If an editor still shows black behind the character, use Green screen instead.'
-      : green ? 'MP4 can’t be see-through, so this was recorded on green screen. Remove the green with your editor’s chroma key effect.'
-      : settings.scene === 'green' || settings.scene === 'colour' ? 'Use your video editor’s chroma key (green screen) effect to remove the background.'
-      : isGif ? 'GIFs have no sound.' : '';
-  $('#resultNote').hidden = !$('#resultNote').textContent;
-  $('#resultSheet').classList.toggle('see-through', transparent);
-  const v = $('#resultVideo'), im = $('#resultGif');
-  v.hidden = isGif; im.hidden = !isGif;
-  if (v.src) URL.revokeObjectURL(v.src);
-  if (im.src) URL.revokeObjectURL(im.src);
-  v.removeAttribute('src');
-  v.muted = !sound;
-  if (isGif) { im.src = URL.createObjectURL(blob); $('#saveVideo').textContent = 'Save GIF'; $('#resultSheet').hidden = false; $('#saveVideo').focus(); return; }
-  $('#saveVideo').textContent = 'Save video';
+// ---------- converting a recording to the other formats
+function loadVideo(blob, { muted = true } = {}) {
+  const v = document.createElement('video');
+  v.className = 'offscreen';
+  v.muted = muted; v.playsInline = true; v.preload = 'auto';
   v.src = URL.createObjectURL(blob);
+  document.body.append(v);
+  const cleanup = () => { URL.revokeObjectURL(v.src); v.remove(); };
+  return new Promise((resolve, reject) => {
+    v.onloadeddata = () => resolve({ v, cleanup });
+    v.onerror = () => { cleanup(); reject(new Error('video unreadable')); };
+  });
+}
+const seekTo = (v, t) => new Promise(r => { v.onseeked = () => r(); v.currentTime = t; });
+
+const GIF_MAX_SECONDS = 30;
+/** GIF from the recording: step through it frame by frame (exact timing, never skips). */
+async function makeGif(rec, label) {
+  const { v, cleanup } = await loadVideo(rec.blob);
+  try {
+    const dur = Number.isFinite(v.duration) ? v.duration : 0;
+    if (!dur) throw new Error('unknown length');
+    const len = Math.min(dur, GIF_MAX_SECONDS);
+    const k = Math.min(1, settings.gifSize / Math.max(v.videoWidth, v.videoHeight));
+    const w = Math.round(v.videoWidth * k), h = Math.round(v.videoHeight * k);
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    const worker = new Worker(new URL('../core/gif-worker.js?v=9f38500a', import.meta.url), { type: 'module' });
+    worker.postMessage({ type: 'start', width: w, height: h, transparent: rec.seeThrough });
+    const step = 1 / settings.gifFps;
+    const n = Math.max(1, Math.round(len / step));
+    for (let i = 0; i < n; i++) {
+      await seekTo(v, Math.min(dur - 0.001, i * step + step / 2));
+      g.clearRect(0, 0, w, h);
+      g.drawImage(v, 0, 0, w, h);
+      const px = g.getImageData(0, 0, w, h).data;
+      worker.postMessage({ type: 'frame', data: px.buffer, delay: step * 1000 }, [px.buffer]);
+      work.set(label, (i + 1) / n * 0.7, `Frame ${i + 1} of ${n}`);
+    }
+    const bytes = await new Promise((resolve, reject) => {
+      worker.onmessage = ({ data: m }) => {
+        if (m.type === 'progress') work.set(label, 0.7 + 0.3 * (m.total ? m.done / m.total : 0), `Frame ${m.done} of ${m.total}`);
+        if (m.type === 'done') resolve(m.bytes);
+      };
+      worker.onerror = reject;
+      worker.postMessage({ type: 'finish' });
+    });
+    worker.terminate();
+    if (dur > GIF_MAX_SECONDS) toast(`GIFs keep the first ${GIF_MAX_SECONDS} seconds.`);
+    return new Blob([bytes], { type: 'image/gif' });
+  } finally { cleanup(); }
+}
+
+/** MP4 (or WebM) from the recording: play it through once, re-recording as it plays (sound too). */
+async function rerecord(rec, format, label) {
+  const { v, cleanup } = await loadVideo(rec.blob, { muted: false });
+  let ac;
+  try {
+    const c = document.createElement('canvas');
+    c.width = v.videoWidth; c.height = v.videoHeight;
+    const g = c.getContext('2d');
+    const stream = c.captureStream(30);
+    if (rec.sound) {
+      // route the sound into the new file without playing it out loud
+      const AC = window.AudioContext || window.webkitAudioContext;
+      ac = new AC();
+      const dest = ac.createMediaStreamDestination();
+      ac.createMediaElementSource(v).connect(dest);
+      dest.stream.getAudioTracks().forEach(t => stream.addTrack(t));
+      await ac.resume();
+    }
+    const type = pickType(format, rec.sound);
+    const out = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 6e6, audioBitsPerSecond: 128e3, videoKeyFrameIntervalDuration: 1000 });
+    const chunks = [];
+    out.ondataavailable = e => e.data.size && chunks.push(e.data);
+    const green = format === 'mp4' && rec.seeThrough; // MP4 can't be see-through
+    const draw = () => {
+      if (green) { g.fillStyle = GREEN; g.fillRect(0, 0, c.width, c.height); } else g.clearRect(0, 0, c.width, c.height);
+      g.drawImage(v, 0, 0);
+      work.set(label, v.duration ? v.currentTime / v.duration : null, 'Plays through once — takes as long as the video');
+    };
+    await seekTo(v, 0);
+    draw();
+    out.start(1000);
+    await v.play();
+    await new Promise(resolve => {
+      const tick = () => { draw(); if (v.ended || v.paused) return resolve(); 'requestVideoFrameCallback' in v ? v.requestVideoFrameCallback(tick) : requestAnimationFrame(tick); };
+      'requestVideoFrameCallback' in v ? v.requestVideoFrameCallback(tick) : requestAnimationFrame(tick);
+      v.onended = resolve;
+    });
+    draw();
+    await new Promise(r => { out.onstop = r; out.stop(); });
+    let blob = new Blob(chunks, { type: out.mimeType || type });
+    if (format === 'webm') blob = new Blob([fixWebm(new Uint8Array(await blob.arrayBuffer()))], { type: 'video/webm' });
+    return { blob, green };
+  } finally { ac?.close?.(); cleanup(); }
+}
+
+// ---------- the save window
+let current = null; // { blob, mime, source, seeThrough, wasSeeThrough, green, sound, outputs: {} }
+const formatOk = f => !current ? false
+  : f === current.source ? true
+  : f === 'gif' ? canGif()
+  : f === 'mp4' ? canMp4()
+  : f === 'webm' ? canWebm() && current.source !== 'mp4' // can't turn Safari's MP4 into WebM
+  : false;
+const chosenFormat = () => (formatOk(settings.format) ? settings.format : current.source);
+
+function showResult(rec) {
+  for (const o of Object.values(current?.outputs || {})) o.url && URL.revokeObjectURL(o.url);
+  current = { ...rec, outputs: { [rec.source]: { blob: rec.blob, green: rec.green } } };
+  const v = $('#resultVideo');
+  if (v.src) URL.revokeObjectURL(v.src);
+  v.muted = !rec.sound;
+  v.src = URL.createObjectURL(rec.blob);
+  $('#resultGif').hidden = true; v.hidden = false;
+  $('#resultSheet').classList.toggle('see-through', rec.seeThrough);
+  syncSaveUI();
   $('#resultSheet').hidden = false;
   $('#saveVideo').focus();
 }
+
+function syncSaveUI() {
+  if (!current) return;
+  const f = chosenFormat();
+  $$('[data-format]').forEach(b => {
+    const ok = formatOk(b.dataset.format);
+    b.disabled = !ok;
+    b.title = ok ? '' : b.dataset.format === 'webm' && current.source === 'mp4' ? 'This browser records MP4, which can’t be turned into WebM here.' : FORMATS[b.dataset.format].why;
+    b.setAttribute('aria-checked', String(b.dataset.format === f));
+  });
+  $('#gifOptions').hidden = f !== 'gif';
+  $('#gifSize').value = String(settings.gifSize);
+  $('#gifFps').value = String(settings.gifFps);
+  const see = current.seeThrough;
+  $('#resultNote').textContent =
+    f === 'gif' ? (see ? 'Loops forever and keeps the see-through background. No sound; edges are either fully see-through or solid. Up to 30 seconds.' : 'Loops forever and plays almost anywhere. No sound. Up to 30 seconds.')
+    : f === 'mp4' ? (see || current.green ? 'Plays almost anywhere (phones, PowerPoint, Canva). MP4 can’t be see-through, so the background is green screen — remove it with your editor’s chroma key effect.' : 'Plays almost anywhere — phones, PowerPoint, Canva.')
+    : see ? 'Keeps the see-through background (VP9 WebM, the standard kind video editors read).'
+    : current.wasSeeThrough ? 'This browser couldn’t record see-through video, so the background is black.'
+    : settings.scene === 'green' || settings.scene === 'colour' ? 'Remove the background with your video editor’s chroma key (green screen) effect.'
+    : 'Good quality and small. Some phones and PowerPoint prefer MP4.';
+  $('#resultNote').hidden = false;
+  $('#saveVideo').textContent = `Save ${FORMATS[f].label}`;
+  $('#resultTitle').textContent = 'Your animation';
+}
+$$('[data-format]').forEach(b => (b.onclick = () => { settings.format = b.dataset.format; saveSettings(); syncSaveUI(); }));
+$('#gifSize').onchange = e => { settings.gifSize = +e.target.value; saveSettings(); if (current) delete current.outputs.gif; };
+$('#gifFps').onchange = e => { settings.gifFps = +e.target.value; saveSettings(); if (current) delete current.outputs.gif; };
+
+let saving = false;
+$('#saveVideo').onclick = async () => {
+  if (!current || saving) return;
+  const f = chosenFormat();
+  const rec = current;
+  saving = true;
+  $('#saveVideo').disabled = true;
+  try {
+    let out = rec.outputs[f];
+    if (!out) {
+      const label = `Making ${FORMATS[f].label}…`;
+      work.set(label, 0);
+      await nextPaint();
+      out = f === 'gif' ? { blob: await makeGif(rec, label) } : await rerecord(rec, f, label);
+      work.done();
+      rec.outputs[f] = out;
+    }
+    if (f === 'gif') { // show the GIF itself, so it can be checked
+      const im = $('#resultGif');
+      if (im.src) URL.revokeObjectURL(im.src);
+      im.src = URL.createObjectURL(out.blob);
+      im.hidden = false; $('#resultVideo').hidden = true; $('#resultVideo').pause();
+    }
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+    const see = rec.seeThrough && f !== 'mp4';
+    await saveFile(new File([out.blob], `my-animation-${see ? 'transparent-' : ''}${stamp}.${f}`, { type: out.blob.type.split(';')[0] || (f === 'gif' ? 'image/gif' : `video/${f}`) }));
+  } catch (e) {
+    console.error(e);
+    work.done();
+    toast(`The ${FORMATS[f].label} couldn’t be made in this browser.`, { error: true });
+  } finally {
+    saving = false;
+    $('#saveVideo').disabled = false;
+  }
+};
+
 async function saveFile(file) {
-  if (navigator.canShare?.({ files: [file] })) {
+  if (isPhone && navigator.canShare?.({ files: [file] })) { // phones: share sheet (e.g. Save to Photos)
     try { await navigator.share({ files: [file], title: 'My animation' }); return; }
     catch (e) { if (e.name === 'AbortError') return; }
   }
@@ -1135,31 +1237,8 @@ async function saveFile(file) {
   document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
 }
-$('#saveVideo').onclick = () => resultFile && saveFile(resultFile);
 $('#closeResult').onclick = () => { $('#resultSheet').hidden = true; $('#resultVideo').pause(); };
 
-// ---- "Save as" choice (Background step)
-function syncFormatUI() {
-  const f = currentFormat();
-  $$('[data-format]').forEach(b => {
-    const ok = FORMATS[b.dataset.format].ok();
-    b.disabled = !ok;
-    b.title = ok ? '' : FORMATS[b.dataset.format].why;
-    b.setAttribute('aria-checked', String(b.dataset.format === f));
-  });
-  $('#gifOptions').hidden = f !== 'gif';
-  const see = settings.scene === 'transparent';
-  $('#formatNote').textContent = f === 'gif'
-    ? (see ? 'Loops forever and keeps the see-through background. No sound; edges are either fully see-through or solid. Up to 30 seconds.' : 'Loops forever, plays anywhere. No sound. Up to 30 seconds.')
-    : f === 'mp4'
-      ? (see ? 'MP4 can’t be see-through, so a Transparent background is saved on green screen.' : 'Plays almost everywhere — phones, PowerPoint, Canva.')
-      : (see ? (canRecordAlpha() ? 'Keeps the see-through background (VP9 WebM, for video editors).' : 'This browser can’t record see-through WebM. Use Chrome or Edge, or Green screen.') : 'Good quality, smaller files. Some phones and PowerPoint prefer MP4.');
-  $('#gifSize').value = String(settings.gifSize);
-  $('#gifFps').value = String(settings.gifFps);
-}
-$$('[data-format]').forEach(b => (b.onclick = () => { settings.format = b.dataset.format; saveSettings(); syncFormatUI(); }));
-$('#gifSize').onchange = e => { settings.gifSize = +e.target.value; saveSettings(); };
-$('#gifFps').onchange = e => { settings.gifFps = +e.target.value; saveSettings(); };
 $('#snapBtn').onclick = async () => {
   const blob = await toBlob($('#stageCanvas'));
   if (blob) saveFile(new File([blob], `my-animation-${Date.now()}.png`, { type: 'image/png' }));
