@@ -1,5 +1,11 @@
 # Changelog
 
+## v13
+- AR Body Tracker: **Pose triggers**. Show a picture, GIF or video when someone strikes a pose. There are 11 ready-made poses, or capture your own. Each trigger has a *close enough* level (default 70%), a live match bar, a hold time, where the effect appears, its size, and how long it shows. Triggers are saved in links and packs.
+- New sticking point **Between hands**, and new effects **Energy ball** and **Star burst** (`assets/effects/`).
+- New **Energy poses** pack.
+- AR drawing animation: **see-through recording rebuilt**. The page now records the transparency layer itself instead of relying on the computer's video recorder, which was silently dropping it. GIFs and green-screen MP4s are made from that layer directly. If the browser's own recorder has to be used, the page checks the file and warns you when the transparency is missing.
+
 ## v12
 - AR drawing animation: **WebM / MP4 / GIF is now chosen in the save window**, after recording, and one recording can be saved in several formats (GIF and MP4 are converted from it).
 - Laptops and desktops download straight away; the share popup is only used on phones and tablets.

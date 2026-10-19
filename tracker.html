@@ -6,11 +6,11 @@
   <title>AR Body Tracker</title>
   <meta name="description" content="Track a body with your camera and stick pictures and videos to it. Runs entirely in your browser — nothing is uploaded.">
   <meta name="theme-color" content="#101418">
-  <meta name="version" content="v12">
+  <meta name="version" content="v13">
   <script src="js/core/failsafe.js?v=5d27624d"></script>
   <link rel="icon" href="assets/sparkle.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/progress.css?v=c68c0312">
-  <link rel="stylesheet" href="css/style.css?v=56888946">
+  <link rel="stylesheet" href="css/style.css?v=bcdc189b">
 </head>
 <body>
   <main class="app">
@@ -87,6 +87,12 @@
       </section>
 
       <section class="group">
+        <h2>Pose triggers</h2>
+        <p class="fine">Show a picture, GIF or video when someone strikes a pose — hands together for an energy ball, both hands up for a burst of stars. Choose a ready-made pose or capture your own.</p>
+        <button class="btn" id="trigBtn" type="button" aria-controls="trigWin" aria-expanded="false">Pose triggers<span id="trigCount"></span>…</button>
+      </section>
+
+      <section class="group">
         <h2>Camera</h2>
         <label class="row"><span>Camera</span><select id="cameraSelect" aria-label="Choose camera"></select></label>
         <label class="check"><input type="checkbox" id="mirror" checked> Mirror (like a selfie)</label>
@@ -121,6 +127,68 @@
     </aside>
   </main>
 
+  <!-- pose triggers: a side window, so the camera stays in view while poses are tried out -->
+  <section class="side-win" id="trigWin" hidden role="dialog" aria-labelledby="trigTitle">
+    <header class="side-head">
+      <h2 id="trigTitle">Pose triggers</h2>
+      <button class="icon-btn" id="trigWinClose" type="button" aria-label="Close pose triggers">✕</button>
+    </header>
+    <div id="trigListWrap">
+      <p class="fine">Each bar shows how closely the pose matches right now. The line marks “close enough” — when the bar passes it, the trigger fires.</p>
+      <p class="empty" id="trigEmpty">No triggers yet.</p>
+      <ul class="trig-list" id="trigList" aria-label="Pose triggers"></ul>
+      <button class="btn primary wide" id="trigAdd" type="button">+ New trigger</button>
+    </div>
+
+    <form id="trigForm" hidden onsubmit="return false">
+      <h3 id="tfTitle">New trigger</h3>
+      <label class="row"><span>Name</span><input id="tfName" type="text" maxlength="40" placeholder="e.g. Energy ball"></label>
+      <label class="row"><span>Pose</span><select id="tfPose"></select></label>
+      <div id="tfCustom" class="custom-pose" hidden>
+        <p class="fine" id="tfCaptured"></p>
+        <div class="row-inline">
+          <button class="btn" id="tfCapture" type="button">📸 Capture my pose (3 s countdown)</button>
+        </div>
+        <label class="row"><span>Compare</span><select id="tfParts"></select></label>
+      </div>
+      <div class="live">
+        <div class="meter big" id="tfMeter" role="meter" aria-valuemin="0" aria-valuemax="100" aria-label="Match right now"><span class="fill"></span><span class="mark"></span></div>
+        <p class="fine" id="tfMeterText" aria-live="polite"></p>
+      </div>
+      <div class="row slider">
+        <label for="tfClose">Close enough</label><output id="tfCloseOut"></output>
+        <input type="range" id="tfClose" min="30" max="95" step="5" value="70">
+      </div>
+      <div class="row slider">
+        <label for="tfHold">Hold the pose for</label><output id="tfHoldOut"></output>
+        <input type="range" id="tfHold" min="0" max="2" step="0.1" value="0.3">
+      </div>
+      <h3>Then show</h3>
+      <label class="row"><span>What</span><select id="tfShow"></select></label>
+      <label class="row" id="tfUrlRow" hidden><span>Address</span><input id="tfUrl" type="url" inputmode="url" placeholder="https://… .gif, .png, .mp4"></label>
+      <label class="row"><span>Where</span><select id="tfPlace"></select></label>
+      <div class="row slider">
+        <label for="tfSize">Size</label><output id="tfSizeOut"></output>
+        <input type="range" id="tfSize" min="0.2" max="4" step="0.1" value="1">
+      </div>
+      <label class="row"><span>For</span>
+        <select id="tfMode">
+          <option value="time">a set time</option>
+          <option value="while">as long as the pose is held</option>
+        </select>
+      </label>
+      <div class="row slider" id="tfDurRow">
+        <label for="tfDur">How long</label><output id="tfDurOut"></output>
+        <input type="range" id="tfDur" min="0.5" max="10" step="0.5" value="2">
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="tfCancel" type="button">Cancel</button>
+        <button class="btn primary" id="tfSave" type="button">Save trigger</button>
+      </div>
+    </form>
+  </section>
+  <div class="trig-countdown" id="trigCountdown" hidden aria-live="assertive"></div>
+
   <div class="sheet" id="qrSheet" hidden role="dialog" aria-modal="true" aria-labelledby="qrTitle">
     <div class="sheet-card">
       <h2 id="qrTitle">Scan to open this layout</h2>
@@ -135,6 +203,6 @@
     </div>
   </div>
 
-  <script type="module" src="js/app.js?v=19d9a5cb"></script>
+  <script type="module" src="js/app.js?v=f79ae90e"></script>
 </body>
 </html>

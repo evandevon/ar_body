@@ -25,6 +25,7 @@ export const ANCHORS = [
   { id: 'rShoulder', label: 'Right shoulder',     group: 'Arms', size: 0.45 },
   { id: 'lHand',     label: 'Left hand',          group: 'Arms', size: 0.5 },
   { id: 'rHand',     label: 'Right hand',         group: 'Arms', size: 0.5 },
+  { id: 'betweenHands', label: 'Between hands',   group: 'Arms', size: 0.8 },
   { id: 'lFoot',     label: 'Left foot',          group: 'Legs', size: 0.5 },
   { id: 'rFoot',     label: 'Right foot',         group: 'Legs', size: 0.5 },
   // Bones stretch between two joints. For these, size = picture height as a multiple of the
@@ -117,15 +118,19 @@ export function computeAnchors(lm, W, H, mirror) {
   }
   bone('spine', shMid, hipMid);
 
+  const hands = {};
   for (const s of ['l', 'r']) {
     const el = P(s + 'El'), wr = P(s + 'Wr');
     const hand = { ...avg(wr, P(s + 'Index'), P(s + 'Pinky')), v: wr.v };
+    hands[s] = hand;
     set(s + 'Hand', hand, ang(el, wr) + Math.PI / 2); // forearm pointing up = upright
 
     const kn = P(s + 'Knee'), an = P(s + 'Ank');
     const foot = { ...avg(an, P(s + 'Heel'), P(s + 'Toe')), v: an.v };
     set(s + 'Foot', foot, ang(kn, an) - Math.PI / 2); // shin pointing down = upright
   }
+  // the point between the two hands (e.g. an energy ball held in both hands)
+  set('betweenHands', mid(hands.l, hands.r), 0);
   return out;
 }
 

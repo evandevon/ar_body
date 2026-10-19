@@ -4,7 +4,7 @@
 // dropping the transparency layer. This copies every frame (including the transparency data)
 // unchanged and adds: total duration, a seek index (Cues), and a SeekHead pointing to it.
 
-const ID = {
+export const ID = {
   EBML: 0x1a45dfa3, Segment: 0x18538067, SeekHead: 0x114d9b74, Seek: 0x4dbb, SeekID: 0x53ab, SeekPosition: 0x53ac,
   Info: 0x1549a966, TimecodeScale: 0x2ad7b1, Duration: 0x4489, MuxingApp: 0x4d80, WritingApp: 0x5741,
   Tracks: 0x1654ae6b, TrackEntry: 0xae, TrackNumber: 0xd7, TrackType: 0x83,
@@ -16,7 +16,7 @@ const ID = {
 const SEGMENT_CHILDREN = new Set([ID.SeekHead, ID.Info, ID.Tracks, ID.Cluster, ID.Cues, ID.Tags, 0x1043a770 /* Chapters */, 0x1941a469 /* Attachments */]);
 
 // ---------- reading
-function readVint(d, p, keepMarker) {
+export function readVint(d, p, keepMarker) {
   const b = d[p];
   if (!b) throw new Error('bad vint');
   let len = 1;
@@ -26,16 +26,16 @@ function readVint(d, p, keepMarker) {
   for (let i = 1; i < len; i++) { v = v * 256 + d[p + i]; if (d[p + i] !== 0xff) allOnes = false; }
   return { value: v, len, unknown: !keepMarker && allOnes };
 }
-function readEl(d, p) {
+export function readEl(d, p) {
   const id = readVint(d, p, true);
   const size = readVint(d, p + id.len);
   const dataStart = p + id.len + size.len;
   return { id: id.value, start: p, dataStart, size: size.unknown ? -1 : size.value, end: size.unknown ? -1 : dataStart + size.value };
 }
-const readUint = (d, s, e) => { let v = 0; for (let i = s; i < e; i++) v = v * 256 + d[i]; return v; };
+export const readUint = (d, s, e) => { let v = 0; for (let i = s; i < e; i++) v = v * 256 + d[i]; return v; };
 
 // ---------- writing
-function vintSize(n, width) {
+export function vintSize(n, width) {
   if (!width) { width = 1; while (n >= 2 ** (7 * width) - 1) width++; }
   const out = new Uint8Array(width);
   let v = n;
@@ -43,23 +43,23 @@ function vintSize(n, width) {
   out[0] |= 0x80 >> (width - 1);
   return out;
 }
-function idBytes(id) { const b = []; let v = id; while (v > 0) { b.unshift(v & 0xff); v = Math.floor(v / 256); } return Uint8Array.from(b); }
-function concat(parts) {
+export function idBytes(id) { const b = []; let v = id; while (v > 0) { b.unshift(v & 0xff); v = Math.floor(v / 256); } return Uint8Array.from(b); }
+export function concat(parts) {
   let n = 0; for (const p of parts) n += p.length;
   const out = new Uint8Array(n); let o = 0;
   for (const p of parts) { out.set(p, o); o += p.length; }
   return out;
 }
-function el(id, data, sizeWidth) { return concat([idBytes(id), vintSize(data.length, sizeWidth), data]); }
-function uintBytes(v, width) {
+export function el(id, data, sizeWidth) { return concat([idBytes(id), vintSize(data.length, sizeWidth), data]); }
+export function uintBytes(v, width) {
   if (!width) { width = 1; while (v >= 2 ** (8 * width)) width++; }
   const out = new Uint8Array(width); let x = v;
   for (let i = width - 1; i >= 0; i--) { out[i] = x % 256; x = Math.floor(x / 256); }
   return out;
 }
-const uintEl = (id, v, width) => el(id, uintBytes(v, width));
-const floatEl = (id, v) => { const b = new Uint8Array(8); new DataView(b.buffer).setFloat64(0, v); return el(id, b); };
-const strEl = (id, s) => el(id, new TextEncoder().encode(s));
+export const uintEl = (id, v, width) => el(id, uintBytes(v, width));
+export const floatEl = (id, v) => { const b = new Uint8Array(8); new DataView(b.buffer).setFloat64(0, v); return el(id, b); };
+export const strEl = (id, s) => el(id, new TextEncoder().encode(s));
 
 /** @param {ArrayBuffer|Uint8Array} input  @returns {Uint8Array} fixed WebM (or the input if it can't be parsed) */
 export function fixWebm(input) {
@@ -182,4 +182,40 @@ function rebuild(d) {
   const seekHead = el(ID.SeekHead, concat([seekEntry(ID.Info, infoPos), seekEntry(ID.Tracks, tracksPos), seekEntry(ID.Cues, cuesPos), ...(tagsEl.length ? [seekEntry(ID.Tags, tagsPos)] : [])]));
   const body = concat([seekHead, infoEl, tracks, ...clusterEls, cuesEl, tagsEl]);
   return concat([header, idBytes(ID.Segment), vintSize(body.length, 8), body]);
+}
+
+const BLOCK_ADDITIONS = 0x75a1;
+/** Counts video frames and how many of them carry a transparency layer (BlockAdditions). */
+export function alphaReport(input) {
+  const d = input instanceof Uint8Array ? input : new Uint8Array(input);
+  let frames = 0, withAlpha = 0, vt = 1;
+  try {
+    const ebml = readEl(d, 0);
+    const seg = readEl(d, ebml.end);
+    const segEnd = seg.size < 0 ? d.length : Math.min(d.length, seg.end);
+    for (let p = seg.dataStart; p < segEnd;) {
+      const e = readEl(d, p);
+      if (e.id === ID.Tracks) for (let q = e.dataStart; q < e.end;) {
+        const t = readEl(d, q); let num = 0, type = 0;
+        for (let r = t.dataStart; r < t.end;) { const c = readEl(d, r); if (c.id === ID.TrackNumber) num = readUint(d, c.dataStart, c.end); if (c.id === ID.TrackType) type = readUint(d, c.dataStart, c.end); r = c.end; }
+        if (type === 1) vt = num;
+        q = t.end;
+      }
+      if (e.id === ID.Cluster && e.size >= 0) {
+        for (let q = e.dataStart; q < e.end;) {
+          const c = readEl(d, q);
+          if (c.id === ID.SimpleBlock) { if (readVint(d, c.dataStart).value === vt) frames++; }
+          else if (c.id === ID.BlockGroup) {
+            let track = 0, alpha = false;
+            for (let r = c.dataStart; r < c.end;) { const b = readEl(d, r); if (b.id === ID.Block) track = readVint(d, b.dataStart).value; if (b.id === BLOCK_ADDITIONS) alpha = true; r = b.end; }
+            if (track === vt) { frames++; if (alpha) withAlpha++; }
+          }
+          q = c.end;
+        }
+      }
+      if (e.size < 0) break;
+      p = e.end;
+    }
+  } catch {}
+  return { frames, withAlpha };
 }

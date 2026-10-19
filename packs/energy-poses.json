@@ -1,0 +1,11 @@
+{
+  "name": "Energy poses",
+  "v": 1,
+  "p": 1,
+  "q": "lite",
+  "o": [],
+  "t": [
+    { "n": "Energy ball", "p": "handsTogether", "u": "assets/effects/energy-ball.gif", "a": "betweenHands", "s": 1.3, "wm": 1 },
+    { "n": "Star burst", "p": "handsUp", "u": "assets/effects/star-burst.gif", "a": "hat", "s": 2.6 }
+  ]
+}

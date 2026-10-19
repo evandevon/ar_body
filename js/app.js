@@ -1,6 +1,7 @@
-import { ANCHORS, ANCHOR_BY_ID, computeAnchors, angleDiff } from './body.js?v=10e5e686';
+import { ANCHORS, ANCHOR_BY_ID, computeAnchors, angleDiff } from './body.js?v=b9a1d706';
 import { openCamera, stopStream, cameraErrorMessage, deviceList, waitForFrames } from './core/camera.js?v=2afbfead';
 import { createProgress } from './core/progress.js?v=4da3a204';
+import { createTriggers } from './triggers.js?v=a9716f25';
 
 const trackerProgress = createProgress();
 const mediaProgress = createProgress();
@@ -449,7 +450,10 @@ const entryOf = (src, settings) => {
   return e;
 };
 function serialise() {
-  return { v: 1, p: state.numPoses, q: state.model, o: state.overlays.map(o => entryOf(o.src, o)) };
+  const out = { v: 1, p: state.numPoses, q: state.model, o: state.overlays.map(o => entryOf(o.src, o)) };
+  const t = triggers.serialise();
+  if (t.length) out.t = t; // pose triggers
+  return out;
 }
 /** The layout a link/pack describes, in the same form as serialise(), without loading it. */
 function normalise(data) {
@@ -458,6 +462,7 @@ function normalise(data) {
     p: [1, 2, 3, 4].includes(data.p) ? data.p : state.numPoses,
     q: ['lite', 'full', 'heavy'].includes(data.q) ? data.q : state.model,
     o: (data.o || []).filter(e => typeof e?.u === 'string' && /^https?:/i.test(e.u)).map(e => entryOf(e.u, parseEntry(e))),
+    ...(Array.isArray(data.t) && data.t.length ? { t: triggers.normalise(data.t) } : {}),
   };
 }
 function parseEntry(e) {
@@ -520,6 +525,7 @@ async function applyLayout(data) {
       if (typeof e?.u !== 'string' || !/^https?:\/\//i.test(e.u)) continue;
       await addOverlay({ src: e.u, settings: parseEntry(e) });
     }
+    await triggers.load((Array.isArray(data.t) ? data.t : []).filter(e => typeof e?.u === 'string' && /^https?:\/\//i.test(e.u)));
   } finally {
     mediaProgress.done();
     applying = false;
@@ -537,8 +543,22 @@ state.pack = null; // { id, sig } of the pack currently loaded
 
 /** Turns a pack file's picture paths ("assets/bone.svg") into full addresses. */
 function resolvePack(data) {
-  return { ...data, o: (data.o || []).map(e => ({ ...e, u: new URL(e.u, SITE).href })) };
+  return { ...data, o: (data.o || []).map(e => ({ ...e, u: new URL(e.u, SITE).href })), t: triggers.resolve(data.t) };
 }
+
+// pose triggers: "when someone does this pose, show that"
+const triggers = createTriggers({
+  loadMedia: async src => {
+    const kind = kindOf('', src);
+    const media = kind === 'video' ? await loadVideo(src) : kind === 'gif' ? await loadGif(src) : await loadImage(src);
+    return { media, kind };
+  },
+  drawItem: (item, a, t) => drawOverlay(item, a, t),
+  anchors: ANCHORS,
+  save: () => saveToLink(),
+  site: SITE.href,
+  status: (msg, o) => setStatus(msg, o),
+});
 const signature = () => JSON.stringify(serialise());
 
 async function fetchPack(id) {
@@ -604,10 +624,12 @@ async function copyLink() {
 function savePackFile() {
   const data = serialise();
   // pictures on this website are saved as paths, so the pack works wherever the site is hosted
-  data.o = data.o.map(e => {
+  const local = e => {
     const u = new URL(e.u);
     return u.origin === location.origin && u.pathname.startsWith(SITE.pathname) ? { ...e, u: decodeURIComponent(u.pathname.slice(SITE.pathname.length)) } : e;
-  });
+  };
+  data.o = data.o.map(local);
+  if (data.t) data.t = data.t.map(local);
   const name = prompt('Name for this pack (shown on the Packs button):', state.pack?.id || 'My pack');
   if (name == null) return;
   const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'my-pack';
@@ -799,6 +821,7 @@ function frame(now) {
     try { state.result = state.landmarker.detectForVideo(cam, ts); }
     catch (e) { console.warn(e); }
     updatePeople();
+    triggers.update(Array.from({ length: state.numPoses }, (_, i) => state.result?.landmarks?.[i]), cam.videoWidth, cam.videoHeight, now);
   }
 
   ctx.save();
@@ -814,6 +837,7 @@ function frame(now) {
       if (a) drawOverlay(o, a, now);
     }
   }
+  triggers.draw(i => state.people[i], now);
   if (state.showAnchors) drawAnchorPoints();
 }
 
@@ -863,7 +887,7 @@ function toggleRecording() {
     let blob = new Blob(chunks, { type: mime });
     // browsers write WebM as a live stream; rebuild it into the standard layout editors expect
     if (mime.includes('webm')) {
-      const { fixWebm } = await import('./core/webm-fix.js?v=6fbce3a4');
+      const { fixWebm } = await import('./core/webm-fix.js?v=44d6bc6b');
       blob = new Blob([fixWebm(new Uint8Array(await blob.arrayBuffer()))], { type: 'video/webm' });
     }
     download(blob, stampName(mime.includes('mp4') ? 'mp4' : 'webm'));
@@ -912,6 +936,7 @@ $('#copyLinkBtn').onclick = copyLink;
 buildPackButtons();
 $('#qrBtn').onclick = showQr;
 $('#savePackBtn').onclick = savePackFile;
+triggers.wire(() => { const lm = state.result?.landmarks?.[0]; return lm && state.stream ? { lm, vw: cam.videoWidth, vh: cam.videoHeight } : null; });
 $('#qrClose').onclick = () => { $('#qrSheet').hidden = true; $('#qrBtn').focus(); };
 $('#qrCopy').onclick = copyLink;
 $('#qrDownload').onclick = () => $('#qrCanvas').toBlob(b => {

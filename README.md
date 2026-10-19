@@ -38,7 +38,7 @@ The limb on the left of the camera picture moves the limb on the left of the dra
 | **MP4** | playing anywhere — phones, PowerPoint, Canva | no — a *Transparent* background is saved on green screen | yes |
 | **GIF** | slides, websites, messages; loops forever | yes (edges are fully see-through or solid) | no |
 
-See-through WebMs are saved as VP9 with the transparency layer, total length and a seek index — the same layout FFmpeg makes — so editors import them properly. (Browsers record a "live stream" style file; the page rebuilds it before saving.) MP4 is only offered where the browser can make real H.264 MP4 (Chrome/Edge on Windows, Mac and Chromebooks; Safari). GIFs are made frame by frame from the recording (up to 30 seconds), at the size and smoothness you choose. MP4s converted from a WebM recording take as long as the video to make. On laptops, *Save* downloads the file; on phones and tablets it opens the share sheet (e.g. *Save Video* to Photos). *Green screen* records the character on bright green for any editor's chroma-key effect. Snapshots (◉) on *Transparent* save as see-through PNGs. Neither background draws the ground shadow, so keying is clean.
+See-through recordings are made by the page itself (in Chrome, Edge and other browsers with WebCodecs). It saves the colour picture and the see-through layer as two VP9 streams and joins them into one WebM, the way FFmpeg does. Many computers' built-in video recorders silently drop the transparency, so the page doesn't rely on them. Where the page has to use the browser's recorder, it checks the result and warns you if the transparency was lost. GIFs and green-screen MP4s made from a see-through recording read the transparency layer directly, too. See-through WebMs are saved as VP9 with the transparency layer, total length and a seek index — the same layout FFmpeg makes — so editors import them properly. (Browsers record a "live stream" style file; the page rebuilds it before saving.) MP4 is only offered where the browser can make real H.264 MP4 (Chrome/Edge on Windows, Mac and Chromebooks; Safari). GIFs are made frame by frame from the recording (up to 30 seconds), at the size and smoothness you choose. MP4s converted from a WebM recording take as long as the video to make. On laptops, *Save* downloads the file; on phones and tablets it opens the share sheet (e.g. *Save Video* to Photos). *Green screen* records the character on bright green for any editor's chroma-key effect. Snapshots (◉) on *Transparent* save as see-through PNGs. Neither background draws the ground shadow, so keying is clean.
 
 **Sound:** tick *Record sound from the microphone* in Background (or tap the microphone button while performing) to include sound in the video. It's off by default. The level bar shows the microphone is hearing you; pick a different microphone from the list if needed.
 
@@ -56,6 +56,16 @@ Characters are kept on that device (browser storage) and appear under **Your cha
 - **Bones** stay full width when a limb points toward or away from the camera, and squash only along their length — like a card tilting — instead of shrinking. The page learns each bone's full length while the limb is held out.
 - **↑ / ↓** change which overlay is in front. **⧉** duplicates.
 - **People** tracks up to 4 people; every overlay is applied to each person.
+
+### Pose triggers
+
+**Pose triggers…** (in the settings) opens a side window, so the camera stays in view while you try poses out. A trigger shows a picture, GIF or video when someone strikes a pose. Animated GIFs and videos start from the beginning each time.
+
+- **Ready-made poses**: hands together, both hands up, left or right hand up, arms out (T-pose), star jump, squat, hands on head, hands on hips, arms crossed (X), kick.
+- **Your own pose**: choose *My own pose*, press **Capture**, and hold the pose through the 3-second countdown. Compare the whole body, the arms only, or the legs only. Mirroring doesn't matter.
+- **Close enough** (70% by default) is how closely the pose must match. Each trigger has a live bar showing the match right now, with a line at its close-enough level. **Hold the pose for** stops it firing by accident.
+- **Then show**: the *Energy ball* or *Star burst* (in `assets/effects/`), or any picture, GIF or video address. Choose where it appears (including *Between hands*), its size, and whether it shows for a set time or as long as the pose is held.
+- Triggers are saved in the link and in packs. The **Energy poses** pack has two: hands together makes an energy ball, and both hands up makes a star burst.
 
 ### Debugging
 
@@ -140,6 +150,7 @@ overlays.html            forwards old links to tracker.html
 packs/                   pack files (short links) + index.json
 css/                     styling
 js/app.js, js/body.js    AR Body Tracker: camera, layers, sticking points, packs
+js/poses.js, js/triggers.js  pose triggers: pose matching, and the Triggers window
 js/animate/              Animate: cut-out, rig (mesh + bones), WebGL renderer, scenes, storage
 js/core/camera.js        shared camera, camera/mic lists, microphone
 js/core/tracker.js       body tracker loader (with backup source)
@@ -149,6 +160,7 @@ vendor/qrcode/           QR code maker (MIT)
 vendor/gifenc/           GIF encoder (MIT)
 js/core/webm-fix.js      rebuilds recorded WebMs into the standard layout editors expect
 js/core/gif-worker.js    makes GIFs in the background
+js/core/alpha-video.js   see-through video recording and reading (with alpha-worker.js)
 models/                  body model files (you add these; see models/README.md)
 CHANGELOG.md             what changed in each version
 assets/                  sample stickers, skeleton pictures, example drawing — host your own here too
