@@ -6,11 +6,11 @@
   <title>AR drawing animation</title>
   <meta name="description" content="Bring a drawing to life: the camera copies a real person's movements onto the drawn character. Runs in the browser — nothing is uploaded.">
   <meta name="theme-color" content="#101418">
-  <meta name="version" content="v9">
+  <meta name="version" content="v11">
   <script src="js/core/failsafe.js?v=5d27624d"></script>
   <link rel="icon" href="assets/sparkle.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/progress.css?v=c68c0312">
-  <link rel="stylesheet" href="css/animate.css?v=6a093f1b">
+  <link rel="stylesheet" href="css/animate.css?v=671ba91c">
 </head>
 <body>
   <header class="topbar">
@@ -108,6 +108,26 @@
             <button type="button" class="seg-btn" data-shape="square">Square</button>
           </div>
 
+          <h2>Save as</h2>
+          <div class="seg" role="radiogroup" aria-label="Save recordings as" id="formatSeg">
+            <button type="button" class="seg-btn" role="radio" data-format="webm">WebM</button>
+            <button type="button" class="seg-btn" role="radio" data-format="mp4">MP4</button>
+            <button type="button" class="seg-btn" role="radio" data-format="gif">GIF</button>
+          </div>
+          <p class="fine" id="formatNote"></p>
+          <div id="gifOptions" class="gif-options" hidden>
+            <label>Size <select id="gifSize">
+              <option value="320">Small (320 px)</option>
+              <option value="480">Medium (480 px)</option>
+              <option value="640">Large (640 px)</option>
+            </select></label>
+            <label>Smoothness <select id="gifFps">
+              <option value="10">10 frames a second (smaller file)</option>
+              <option value="15">15 frames a second</option>
+              <option value="20">20 frames a second (smoother)</option>
+            </select></label>
+          </div>
+
           <h2>Sound</h2>
           <label class="check"><input type="checkbox" id="soundOn"> Record sound from the microphone</label>
           <div id="micRow" hidden>
@@ -165,7 +185,7 @@
   <div class="sheet" id="resultSheet" hidden role="dialog" aria-modal="true" aria-labelledby="resultTitle">
     <div class="sheet-card">
       <h2 id="resultTitle">Your animation</h2>
-      <div class="result-frame"><video id="resultVideo" controls playsinline loop></video></div>
+      <div class="result-frame"><video id="resultVideo" controls playsinline loop></video><img id="resultGif" alt="Your animated GIF" hidden></div>
       <p class="fine note" id="resultNote" hidden></p>
       <div class="btn-row">
         <button class="btn primary" id="saveVideo" type="button">Save video</button>
@@ -179,6 +199,6 @@
   <video id="photoVideo" playsinline muted autoplay class="offscreen"></video>
   <canvas id="glCanvas" class="offscreen"></canvas>
 
-  <script type="module" src="js/animate/main.js?v=58d941e2"></script>
+  <script type="module" src="js/animate/main.js?v=a77f81ef"></script>
 </body>
 </html>

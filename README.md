@@ -30,7 +30,15 @@ The numbered steps along the top are buttons: jump to any step once there's a dr
 
 The limb on the left of the camera picture moves the limb on the left of the drawing, so the character moves like the person looks on screen. Body parts the camera can't see (e.g. legs out of frame) relax back to the drawn pose.
 
-**For video editing:** *Green screen* records the character on bright green — remove it with any editor's chroma-key effect. *Transparent* records a WebM video with a genuinely see-through background, in Chrome and Edge only (Safari and Firefox can't record transparency). Some editors don't read transparent WebM; if yours shows black behind the character, use Green screen. To convert a transparent WebM for Final Cut / Premiere / After Effects: `ffmpeg -c:v libvpx -i my-animation.webm -c:v prores_ks -profile:v 4444 -pix_fmt yuva444p10le my-animation.mov`. Snapshots (◉) on Transparent save as see-through PNGs. Neither background draws the ground shadow, so keying is clean.
+**Saving recordings** — on the Background step, *Save as*:
+
+| Format | Best for | See-through? | Sound |
+|---|---|---|---|
+| **WebM** | video editors (Olive, Shotcut, DaVinci, CapCut…) | yes, with the *Transparent* background (Chrome/Edge) | yes |
+| **MP4** | playing anywhere — phones, PowerPoint, Canva | no — a *Transparent* background is saved on green screen | yes |
+| **GIF** | slides, websites, messages; loops forever | yes (edges are fully see-through or solid) | no |
+
+See-through WebMs are saved as VP9 with the transparency layer, total length and a seek index — the same layout FFmpeg makes — so editors import them properly. (Browsers record a "live stream" style file; the page rebuilds it before saving.) MP4 is only offered where the browser can make real H.264 MP4 (Chrome/Edge on Windows, Mac and Chromebooks; Safari). GIFs are made in the background while you record, up to 30 seconds, at the size and smoothness you choose. *Green screen* records the character on bright green for any editor's chroma-key effect. Snapshots (◉) on *Transparent* save as see-through PNGs. Neither background draws the ground shadow, so keying is clean.
 
 **Sound:** tick *Record sound from the microphone* in Background (or tap the microphone button while performing) to include sound in the video. It's off by default. The level bar shows the microphone is hearing you; pick a different microphone from the list if needed.
 
@@ -42,7 +50,8 @@ Characters are kept on that device (browser storage) and appear under **Your cha
 - **Add pictures and videos by web address.** The address must go straight to the file (ending in `.png`, `.gif`, `.svg`, `.mp4`, `.webm`…). You can also drag a picture in from another browser tab, or paste an address anywhere on the page.
 - Each overlay card sets what it **sticks to**, its size, position, turn, see-through level, and whether it **tilts with the body**. Double-click a slider to reset it.
 - **Bones** (upper arms, forearms, thighs, shins and spine) stretch a picture from one joint to the next, so it turns and lengthens with the limb. The top of the picture sits at the joint nearer the body (shoulder, elbow, hip, knee, neck), so draw bone pictures standing upright, cropped close. **Size** is then the length: 100% = joint to joint.
-- **Packs** load a ready-made layout: *Crown & sparkles*, or a full *Skeleton* (skull, ribs, spine, pelvis and all eight limb bones). Packs live in the `packs/` folder — see *Packs* below.
+- **Packs** load a ready-made layout: *Crown & sparkles*, or the *Skeleton* — skull, neck, spine, ribs, collarbones, pelvis, and the bones of each arm (humerus, radius & ulna), hand, leg (femur, tibia & fibula) and foot. Its pictures are in `assets/skeleton/`. Packs live in the `packs/` folder — see *Packs* below.
+- **Match left & right** (a layer option): draw a picture for the limb on the *left of the screen*; it's flipped automatically for the matching limb on the right, and follows the mirror switch. The skeleton uses this so the thumb, big toe and ball of the femur always point the right way.
 - Each overlay is a **layer**. The **eye** shows or hides it (saved in the link). Click a layer's name to open its settings; only one is open at a time, and clicking the camera picture closes it.
 - **Bones** stay full width when a limb points toward or away from the camera, and squash only along their length — like a card tilting — instead of shrinking. The page learns each bone's full length while the limb is held out.
 - **↑ / ↓** change which overlay is in front. **⧉** duplicates.
@@ -137,6 +146,9 @@ js/core/tracker.js       body tracker loader (with backup source)
 js/core/failsafe.js      explains what's wrong if the page can't run
 vendor/mediapipe/        bundled body-tracking library + engine (Apache-2.0)
 vendor/qrcode/           QR code maker (MIT)
+vendor/gifenc/           GIF encoder (MIT)
+js/core/webm-fix.js      rebuilds recorded WebMs into the standard layout editors expect
+js/core/gif-worker.js    makes GIFs in the background
 models/                  body model files (you add these; see models/README.md)
 CHANGELOG.md             what changed in each version
 assets/                  sample stickers, skeleton pictures, example drawing — host your own here too

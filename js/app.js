@@ -211,7 +211,7 @@ async function loadGif(src) {
 
 // ---------------------------------------------------------------- overlays
 let nextId = 1;
-const DEFAULTS = { anchor: 'head', size: 1, x: 0, y: 0, rot: 0, opacity: 1, follow: true, flip: false, visible: true };
+const DEFAULTS = { anchor: 'head', size: 1, x: 0, y: 0, rot: 0, opacity: 1, follow: true, flip: false, side: false, visible: true };
 
 const nameFromUrl = src => {
   try { const u = new URL(src); return decodeURIComponent(u.pathname.split('/').filter(Boolean).pop() || u.hostname); }
@@ -292,6 +292,7 @@ const SLIDERS = [
 const CHECKS = [
   { k: 'follow', label: 'Tilt with body' },
   { k: 'flip', label: 'Flip' },
+  { k: 'side', label: 'Match left & right', title: 'Draw the picture for the left side of the screen; it is flipped automatically for the matching right-side body part' },
 ];
 
 function renderCard(o) {
@@ -380,6 +381,7 @@ function renderCard(o) {
     cb.dataset.k = c.k;
     cb.onchange = () => { o[c.k] = cb.checked; };
     lab.append(cb, ` ${c.label}`);
+    if (c.title) lab.title = c.title;
     checks.append(lab);
   }
   body.append(checks);
@@ -434,7 +436,7 @@ const pickSettings = o => Object.fromEntries(Object.keys(DEFAULTS).map(k => [k, 
 // ---------------------------------------------------------------- layout stored in the link
 // The whole layout lives after the # in the address: #l=<compressed settings>.
 // Only web addresses of the pictures/videos are stored, so the link works anywhere.
-const SHORT = { anchor: 'a', size: 's', x: 'x', y: 'y', rot: 'r', opacity: 'o', follow: 'f', flip: 'm', visible: 'vi' };
+const SHORT = { anchor: 'a', size: 's', x: 'x', y: 'y', rot: 'r', opacity: 'o', follow: 'f', flip: 'm', side: 'sd', visible: 'vi' };
 const LONG = Object.fromEntries(Object.entries(SHORT).map(([k, v]) => [v, k]));
 const round = v => (typeof v === 'number' ? Math.round(v * 1000) / 1000 : v);
 
@@ -708,7 +710,12 @@ function drawOverlay(o, a, now) {
   if (o.follow) ctx.rotate(a.angle);
   ctx.translate(o.x * a.scale, -o.y * a.scale);
   ctx.rotate((o.rot * Math.PI) / 180);
-  if (o.flip) ctx.scale(-1, 1);
+  // "Match left & right": pictures are drawn for limbs on the left of the screen, and flipped
+  // for the limb on the right. Decided by which limb it is (not where it is right now), so a
+  // hand crossing the body doesn't suddenly flip.
+  const side = /^([lr])[A-Z]/.exec(o.anchor)?.[1];
+  const onRight = side && (side === 'l') !== state.mirror;
+  if (o.flip !== (o.side && !!onRight)) ctx.scale(-1, 1);
   ctx.globalAlpha = alpha;
   ctx.drawImage(img, -w / 2, -h / 2, w, h);
   ctx.restore();
@@ -841,19 +848,25 @@ function toggleRecording() {
   if (state.recorder) { state.recorder.stop(); return; }
   if (!state.stream || blockedByTaint('record')) return;
   if (!window.MediaRecorder || !view.captureStream) { setStatus('Recording isn’t supported in this browser', { error: true }); return; }
-  const type = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'].find(t => MediaRecorder.isTypeSupported(t)) || '';
+  const type = ['video/mp4;codecs=avc1', 'video/mp4;codecs=avc1.42E01E', 'video/webm;codecs=vp9', 'video/webm'].find(t => MediaRecorder.isTypeSupported(t)) || '';
   let rec;
   try { rec = new MediaRecorder(view.captureStream(30), type ? { mimeType: type, videoBitsPerSecond: 6e6 } : {}); }
   catch { setStatus('Can’t record while a picture from another website is showing.', { error: true }); return; }
   const chunks = [];
   rec.ondataavailable = e => e.data.size && chunks.push(e.data);
-  rec.onstop = () => {
+  rec.onstop = async () => {
     state.recorder = null;
     btn.classList.remove('recording');
     btn.setAttribute('aria-label', 'Start recording');
     btn.querySelector('.lbl').textContent = 'Record';
     const mime = rec.mimeType || type || 'video/webm';
-    download(new Blob(chunks, { type: mime }), stampName(mime.includes('mp4') ? 'mp4' : 'webm'));
+    let blob = new Blob(chunks, { type: mime });
+    // browsers write WebM as a live stream; rebuild it into the standard layout editors expect
+    if (mime.includes('webm')) {
+      const { fixWebm } = await import('./core/webm-fix.js?v=6fbce3a4');
+      blob = new Blob([fixWebm(new Uint8Array(await blob.arrayBuffer()))], { type: 'video/webm' });
+    }
+    download(blob, stampName(mime.includes('mp4') ? 'mp4' : 'webm'));
   };
   try { rec.start(1000); } catch { setStatus('Recording couldn’t start in this browser', { error: true }); return; }
   state.recorder = rec;

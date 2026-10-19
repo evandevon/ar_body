@@ -1,5 +1,14 @@
 # Changelog
 
+## v11
+- **Transparent WebM fixed for video editors**: recordings are now VP9 (not VP8), and rebuilt before saving with their total length, a seek index and the ALPHA_MODE tag — the same layout FFmpeg produces. (Applies to AR Body Tracker recordings too.)
+- AR drawing animation: **Save as WebM, MP4 or GIF** (Background step). Transparent GIFs keep the see-through background; GIF size and smoothness options; up to 30 s.
+- MP4 is only offered where the browser makes real H.264 MP4; a Transparent background is saved on green screen in MP4.
+
+## v10
+- New **Skeleton** pack: skull, neck, spine, ribs, collarbones, pelvis, humerus, radius & ulna, hand bones, femur, tibia & fibula, foot bones (18 layers; pictures in `assets/skeleton/`).
+- New layer option **Match left & right**: one picture serves both sides, flipped automatically for the right-hand limb (and with the mirror switch).
+
 ## v9
 - AR Body Tracker: removed the *Remove green screen* option from layers (old links that used it still open).
 
