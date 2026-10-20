@@ -78,7 +78,7 @@ function rebuild(d) {
 
   let info = null, tracks = null, timecodeScale = 1e6;
   const clusters = []; // { timecode, blocks: [Uint8Array], keyTimes: [] }
-  let videoTrack = 1, videoUid = null, hasAlpha = false, lastTime = 0, frameStep = 33;
+  let videoTrack = 1, videoUid = null, hasAlpha = false, lastTime = 0, frameStep = 33, lastAny = 0;
 
   let p = seg.dataStart;
   while (p < segEnd) {
@@ -126,6 +126,7 @@ function rebuild(d) {
             let key;
             if (c.id === ID.SimpleBlock) key = !!(d[blk.dataStart + track.len + 2] & 0x80);
             else { key = true; for (let r = c.dataStart; r < c.end;) { const b = readEl(d, r); if (b.id === ID.ReferenceBlock) key = false; r = b.end; } }
+            lastAny = Math.max(lastAny, t);
             if (track.value === videoTrack) {
               if (t > lastTime) frameStep = Math.max(1, Math.min(200, t - lastTime));
               lastTime = Math.max(lastTime, t);
@@ -147,7 +148,7 @@ function rebuild(d) {
   if (!tracks || !clusters.length) throw new Error('incomplete');
 
   // ---- build the new segment: SeekHead, Info, Tracks, Clusters, Cues
-  const durationTicks = lastTime + frameStep; // in timecode units (normally ms)
+  const durationTicks = Math.max(lastTime + frameStep, lastAny + 20); // in timecode units (normally ms); sound may run past the last picture
   const infoEl = el(ID.Info, concat([
     uintEl(ID.TimecodeScale, timecodeScale),
     strEl(ID.MuxingApp, 'AR Body'),

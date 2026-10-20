@@ -2,7 +2,7 @@
 // transparency doesn't depend on the computer's video recorder or player keeping it.
 // Recording: frames → alpha-worker.js → WebM (VP9 + transparency layer).
 // Reading:   decodeFrames() turns such a WebM back into see-through pictures (used for GIFs).
-import { ID, readEl, readVint, readUint } from './webm-fix.js?v=44d6bc6b';
+import { ID, readEl, readVint, readUint } from './webm-fix.js?v=aa8263ee';
 
 const hasWebCodecs = () => typeof VideoEncoder !== 'undefined' && typeof VideoDecoder !== 'undefined' && typeof VideoFrame !== 'undefined';
 
@@ -27,7 +27,7 @@ export async function canRecordAlphaItself(w = 1280, h = 720) {
  * Call capture() after every redraw of the canvas; stop() resolves to { blob, frames, sound }.
  */
 export async function createAlphaRecorder(canvas, { audioTrack = null, fps = 30, bitrate = 6e6 } = {}) {
-  const worker = new Worker(new URL('./alpha-worker.js?v=d46fbb6e', import.meta.url), { type: 'module' });
+  const worker = new Worker(new URL('./alpha-worker.js?v=ee3fe622', import.meta.url), { type: 'module' });
   const call = (msg, transfer) => new Promise((resolve, reject) => {
     const on = ({ data: m }) => {
       if (m.type === 'error') { worker.removeEventListener('message', on); reject(new Error(m.message)); }
@@ -39,8 +39,14 @@ export async function createAlphaRecorder(canvas, { audioTrack = null, fps = 30,
   const started = await call({ type: 'start', width: canvas.width, height: canvas.height, fps, bitrate });
   if (!started.ok) { worker.terminate(); throw new Error('encoder unavailable'); }
 
-  let queue = 0, last = -1e9, t0 = performance.now(), dropped = 0, stopped = false;
-  worker.addEventListener('message', ({ data: m }) => { if (m.type === 'ack') queue = m.queue; });
+  // Back-pressure: frames sent but not yet taken by the worker (inFlight), and frames waiting
+  // inside the encoders (encQueue). If the computer can't keep up, frames are skipped — the
+  // video keeps its full length, it just moves a little less smoothly.
+  let inFlight = 0, encQueue = 0, last = -1e9, t0 = performance.now(), dropped = 0, stopped = false;
+  worker.addEventListener('message', ({ data: m }) => {
+    if (m.type === 'ack') { inFlight = Math.max(0, inFlight - 1); encQueue = m.queue; }
+    else if (m.type === 'status') encQueue = m.queue;
+  });
   const g = canvas.getContext('2d');
 
   // sound: the browser's own recorder, sound only (it never had the transparency problem)
@@ -59,10 +65,10 @@ export async function createAlphaRecorder(canvas, { audioTrack = null, fps = 30,
     get dropped() { return dropped; },
     capture(now = performance.now()) {
       if (stopped || now - last < step * 0.85 || now < t0) return;
-      if (queue > 8) { dropped++; return; } // the encoder is behind: skip a frame rather than pile up
+      if (inFlight > 2 || encQueue > 4) { dropped++; return; } // behind: skip this frame rather than pile up
       last = now;
       const img = g.getImageData(0, 0, canvas.width, canvas.height);
-      queue++;
+      inFlight++;
       worker.postMessage({ type: 'frame', data: img.data.buffer, width: img.width, height: img.height, t: Math.round((now - t0) * 1000) }, [img.data.buffer]);
     },
     async stop() {
@@ -74,7 +80,7 @@ export async function createAlphaRecorder(canvas, { audioTrack = null, fps = 30,
       }
       try {
         const res = await call({ type: 'finish', audio, audioOffset: Math.round(audioOffset) }, audio ? [audio] : []);
-        return { blob: new Blob([res.bytes], { type: 'video/webm' }), frames: res.frames, sound: res.sound };
+        return { blob: new Blob([res.bytes], { type: 'video/webm' }), frames: res.frames, sent: res.sent, outputs: res.outputs, sound: res.sound };
       } finally { worker.terminate(); }
     },
     cancel() { stopped = true; try { audioRec?.stop(); } catch {} worker.terminate(); },
@@ -151,7 +157,8 @@ export function alphaFrameCount(bytes) {
  * Decodes a see-through WebM into pictures at the given times.
  * @param bytes Uint8Array  @param times ms, ascending  @param w,h output size
  * @param onFrame(i, ImageData) called once per time, in order (the same picture may repeat)
- * @param before optional async hook, awaited before each frame is decoded (to slow decoding down)
+ * @param before optional async hook, awaited before each frame is decoded (to slow decoding down;
+ *        resolving to false stops decoding)
  */
 export async function decodeFrames(bytes, { times, width, height, onFrame, before }) {
   const { frames } = readFrames(bytes);
@@ -185,7 +192,7 @@ export async function decodeFrames(bytes, { times, width, height, onFrame, befor
   for (const f of frames) {
     if (failed) throw failed;
     if (times.length && f.t > times[times.length - 1] + 200) break; // past the end of what's wanted
-    if (before) await before(f.t);
+    if (before && (await before(f.t)) === false) break; // asked to stop
     const ts = Math.round(f.t * 1000);
     if (!started) { if (!(isKey(f.colour) && isKey(f.alpha))) continue; started = true; }
     cd.decode(new EncodedVideoChunk({ type: isKey(f.colour) ? 'key' : 'delta', timestamp: ts, data: f.colour }));

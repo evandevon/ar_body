@@ -5,7 +5,7 @@
 // layer (as a grey picture) to a second; both are joined into one WebM the standard way
 // (the colour as the frame, the see-through layer attached to it as "BlockAdditional"),
 // the same layout FFmpeg and Chrome use, which video editors read.
-import { ID, el, concat, idBytes, vintSize, uintEl, uintBytes, strEl, floatEl, readEl, readVint, readUint, fixWebm } from './webm-fix.js?v=44d6bc6b';
+import { ID, el, concat, idBytes, vintSize, uintEl, uintBytes, strEl, floatEl, readEl, readVint, readUint, fixWebm } from './webm-fix.js?v=aa8263ee';
 
 const X = { // extra Matroska element IDs
   DocType: 0x4282, DocTypeVersion: 0x4287, DocTypeReadVersion: 0x4285, EBMLVersion: 0x4286, EBMLReadVersion: 0x42f7, EBMLMaxIDLength: 0x42f2, EBMLMaxSizeLength: 0x42f3,
@@ -13,6 +13,7 @@ const X = { // extra Matroska element IDs
   BlockAdditions: 0x75a1, BlockMore: 0xa6, BlockAddID: 0xee, BlockAdditional: 0xa5,
 };
 
+let outputs = { colour: 0, alpha: 0 }, sent = 0;
 let W = 0, H = 0, colourEnc = null, alphaEnc = null, frames = new Map(), pending = 0, failed = null, keyEvery = 30, count = 0;
 
 const codecs = ['vp09.00.10.08', 'vp09.00.31.08', 'vp09.00.41.08'];
@@ -35,10 +36,13 @@ function makeEncoder(cfg, slot) {
       f[slot + 'Key'] = chunk.type === 'key';
       f.key = !!(f.colourKey && f.alphaKey); // a keyframe in the file must be one in both layers
       if (f.colour && f.alpha) pending--;
+      outputs[slot]++;
     },
     error: (e) => { failed = String(e?.message || e); },
   });
   enc.configure(cfg);
+  // tell the page whenever the encoder catches up, so it can send more frames
+  enc.addEventListener?.('dequeue', status);
   return enc;
 }
 
@@ -63,6 +67,9 @@ function toI420(rgba, w, h, colour) {
   }
   return out;
 }
+
+const encQueue = () => Math.max(colourEnc?.encodeQueueSize || 0, alphaEnc?.encodeQueueSize || 0);
+function status() { self.postMessage({ type: 'status', queue: encQueue() }); }
 
 const colorSpace = { primaries: 'smpte170m', transfer: 'smpte170m', matrix: 'smpte170m', fullRange: false };
 
@@ -166,7 +173,7 @@ self.onmessage = async ({ data: m }) => {
     if (m.type === 'start') {
       W = m.width & ~1; H = m.height & ~1;
       keyEvery = Math.max(1, Math.round(m.fps || 30));
-      frames = new Map(); pending = 0; failed = null; count = 0;
+      frames = new Map(); pending = 0; failed = null; count = 0; sent = 0; outputs = { colour: 0, alpha: 0 };
       const cfg = await pickConfig(W, H, m.bitrate || 6e6);
       const acfg = cfg && { ...cfg, bitrate: Math.round((m.bitrate || 6e6) / 3) };
       if (!cfg || !(await VideoEncoder.isConfigSupported(acfg)).supported) { self.postMessage({ type: 'started', ok: false }); return; }
@@ -181,7 +188,8 @@ self.onmessage = async ({ data: m }) => {
         for (let y = 0; y < H; y++) out.set(rgba.subarray(y * m.width * 4, y * m.width * 4 + W * 4), y * W * 4);
         encode(out, m.t);
       } else encode(rgba, m.t);
-      self.postMessage({ type: 'ack', queue: pending + colourEnc.encodeQueueSize });
+      sent++;
+      self.postMessage({ type: 'ack', queue: encQueue() });
     } else if (m.type === 'finish') {
       if (colourEnc) { await Promise.all([colourEnc.flush(), alphaEnc.flush()]); colourEnc.close(); alphaEnc.close(); }
       colourEnc = alphaEnc = null;
@@ -191,7 +199,7 @@ self.onmessage = async ({ data: m }) => {
       let audio = null;
       try { audio = readAudio(m.audio ? new Uint8Array(m.audio) : null); } catch (e) { console.warn('sound skipped', e); }
       const bytes = mux(list, audio, m.audioOffset || 0);
-      self.postMessage({ type: 'done', bytes, frames: list.length, sound: !!audio }, [bytes.buffer]);
+      self.postMessage({ type: 'done', bytes, frames: list.length, sent, outputs, sound: !!audio }, [bytes.buffer]);
       frames = new Map();
     }
   } catch (e) {

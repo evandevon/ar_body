@@ -5,8 +5,8 @@ import { SCENES, drawCover } from './backgrounds.js?v=b50d8b94';
 import { saveCharacter, listCharacters, deleteCharacter, getCharacter } from './storage.js?v=53955991';
 import { openCamera, stopStream, cameraErrorMessage, deviceList, waitForFrames, openMic, micErrorMessage, levelMeter } from '../core/camera.js?v=2afbfead';
 import { createProgress, nextPaint } from '../core/progress.js?v=4da3a204';
-import { fixWebm } from '../core/webm-fix.js?v=44d6bc6b';
-import { canRecordAlphaItself, createAlphaRecorder, alphaFrameCount, decodeFrames } from '../core/alpha-video.js?v=55b6c38d';
+import { fixWebm } from '../core/webm-fix.js?v=aa8263ee';
+import { canRecordAlphaItself, createAlphaRecorder, alphaFrameCount, decodeFrames } from '../core/alpha-video.js?v=c39cef25';
 
 const work = createProgress({ delay: 150 }); // photo processing, preparing the character
 const trackerProg = createProgress();       // body tracker download
@@ -1249,39 +1249,50 @@ async function rerecordFromFrames(rec, label) {
     }
     const times = Array.from({ length: Math.max(1, Math.floor(dur * 30)) }, (_, i) => i * (1000 / 30));
     const queue = [];
-    let decodeDone = false, decodeErr = null;
+    let decodeDone = false, decodeErr = null, finished = false, lastQueued = -1;
     const draw = img => {
       g.fillStyle = GREEN; g.fillRect(0, 0, w, h);
       tg.putImageData(img, 0, 0); g.drawImage(tmp, 0, 0);
     };
     const decoding = decodeFrames(bytes, {
       times, width: w, height: h,
-      onFrame: (i, img) => queue.push({ t: times[i], img }),
-      before: async () => { while (queue.length > 6) await new Promise(r => setTimeout(r, 10)); },
+      onFrame: (i, img) => { queue.push({ t: times[i], img }); lastQueued = times[i]; },
+      before: async () => {
+        while (queue.length > 8 && !finished) await new Promise(r => setTimeout(r, 10));
+        return !finished;
+      },
     }).then(() => (decodeDone = true), e => { decodeErr = e; decodeDone = true; });
-    while (!queue.length && !decodeDone) await new Promise(r => setTimeout(r, 10));
+    await seekTo(v, 0);
+    // a little head start for the decoder before playing
+    while (queue.length < 6 && !decodeDone) await new Promise(r => setTimeout(r, 10));
     if (decodeErr) throw decodeErr;
     draw(queue[0].img);
     const type = pickType('mp4', rec.sound);
     const out = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 6e6, audioBitsPerSecond: 128e3, videoKeyFrameIntervalDuration: 1000 });
     const chunks = [];
     out.ondataavailable = e => e.data.size && chunks.push(e.data);
-    await seekTo(v, 0);
     out.start(1000);
     await v.play();
-    await new Promise(resolve => {
+    // Plays in step with the decoder: if the pictures fall behind (a slow computer), the video
+    // and the recording pause until they catch up, so nothing at the end is lost.
+    let stalled = false;
+    await new Promise((resolve, reject) => {
       const tick = () => {
+        if (decodeErr) return reject(decodeErr);
         const now = v.currentTime * 1000;
         let pic = null;
         while (queue.length && queue[0].t <= now) pic = queue.shift().img;
         if (pic) draw(pic);
-        work.set(label, dur ? v.currentTime / dur : null, 'Plays through once — takes as long as the video');
-        if (v.ended || (decodeDone && !queue.length && v.paused)) return resolve();
+        const behind = !decodeDone && lastQueued < now - 60;
+        if (behind && !stalled && !v.ended) { stalled = true; v.pause(); if (out.state === 'recording') out.pause(); }
+        else if (stalled && (decodeDone || lastQueued >= now + 150)) { stalled = false; if (out.state === 'paused') out.resume(); v.play().catch(() => {}); }
+        work.set(label, dur ? v.currentTime / dur : null, 'Plays through once — takes about as long as the video');
+        if (v.ended) return resolve();
         requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
     });
-    while (queue.length) draw(queue.shift().img);
+    finished = true;
     await decoding;
     await new Promise(r => { out.onstop = r; out.stop(); });
     return { blob: new Blob(chunks, { type: out.mimeType || type }), green: true };

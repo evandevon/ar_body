@@ -887,7 +887,7 @@ function toggleRecording() {
     let blob = new Blob(chunks, { type: mime });
     // browsers write WebM as a live stream; rebuild it into the standard layout editors expect
     if (mime.includes('webm')) {
-      const { fixWebm } = await import('./core/webm-fix.js?v=44d6bc6b');
+      const { fixWebm } = await import('./core/webm-fix.js?v=aa8263ee');
       blob = new Blob([fixWebm(new Uint8Array(await blob.arrayBuffer()))], { type: 'video/webm' });
     }
     download(blob, stampName(mime.includes('mp4') ? 'mp4' : 'webm'));
