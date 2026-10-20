@@ -1,5 +1,8 @@
 # Changelog
 
+## v15
+- AR drawing animation: the **Take a photo** button is gone. Drawings now come from **Choose a picture**, *Try the example*, or a new **web address** box. A drawing opened from a web address is saved in the page's link (`animate.html#drawing=…`), so sharing the link shares the drawing.
+
 ## v14
 - AR drawing animation, **fixed: see-through recordings could stop after the first second or so.** On larger videos, the page's own recorder (new in v13) could stall and quietly stop taking frames, so the saved WebM, GIF and MP4 were much shorter than the performance. It now skips the odd frame when the computer is busy, instead of stopping. Tested with a 20-second, 1280×720 recording: the full 20 seconds were saved.
 - **Fixed: green-screen MP4s from see-through recordings could lose their ending.** On a slower computer the pictures fell behind the sound, and the end was cut off. The conversion now waits for the pictures to catch up, and nothing gets cut off.

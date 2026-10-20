@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="90" viewBox="0 0 420 90">
+  <!-- collarbones: gentle S-curves from the breastbone out to each shoulder -->
+  <g fill="#f4f1e6" stroke="#6b6658" stroke-width="5" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M188 50 C150 30 120 66 80 52 C55 44 30 30 14 40 C6 46 10 60 22 58 C40 50 58 62 82 66 C122 74 152 48 190 64 Z"/>
+    <path d="M232 50 C270 30 300 66 340 52 C365 44 390 30 406 40 C414 46 410 60 398 58 C380 50 362 62 338 66 C298 74 268 48 230 64 Z"/>
+  </g>
+</svg>

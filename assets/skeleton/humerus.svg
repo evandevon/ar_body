@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="110" height="420" viewBox="0 0 110 420">
+  <!-- upper arm bone. Top = shoulder, bottom = elbow. Inner side (towards body) = right of picture -->
+  <path fill="#f4f1e6" stroke="#6b6658" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" d="M64 8 C88 6 102 24 98 44 C95 58 86 66 76 70 C72 120 70 250 72 352 C86 356 100 366 100 384 C100 404 86 412 74 404 C66 412 50 412 42 404 C30 412 12 404 12 386 C12 368 26 356 40 352 C42 250 42 130 38 76 C24 70 16 58 18 44 C22 22 42 10 64 8 Z"/>
+  <path d="M40 78 C48 72 62 72 72 72" fill="none" stroke="#6b6658" stroke-width="4"/>
+</svg>

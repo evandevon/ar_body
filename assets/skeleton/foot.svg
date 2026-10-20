@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="170" height="320" viewBox="0 0 170 320">
+  <!-- foot bones seen from above. Heel at the top (towards the knee), toes at the bottom, big toe on the inner side (right) -->
+  <g fill="#f4f1e6" stroke="#6b6658" stroke-width="5" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M60 8 C84 2 106 10 108 30 C110 48 100 58 98 72 L66 74 C60 60 48 50 48 32 C48 20 52 12 60 8 Z"/>
+    <rect x="52" y="80" width="54" height="34" rx="12"/>
+    <rect x="44" y="118" width="30" height="30" rx="10"/><rect x="78" y="118" width="40" height="30" rx="10"/>
+    <line x1="52.0" y1="154.0" x2="38.5" y2="210.5" stroke="#6b6658" stroke-width="18.0" stroke-linecap="round"/>
+    <line x1="52.0" y1="154.0" x2="38.5" y2="210.5" stroke="#f4f1e6" stroke-width="12.0" stroke-linecap="round"/>
+    <line x1="38.5" y1="219.5" x2="33.7" y2="237.0" stroke="#6b6658" stroke-width="16.5" stroke-linecap="round"/>
+    <line x1="38.5" y1="219.5" x2="33.7" y2="237.0" stroke="#f4f1e6" stroke-width="10.5" stroke-linecap="round"/>
+    <line x1="33.7" y1="246.0" x2="30.2" y2="257.6" stroke="#6b6658" stroke-width="15.0" stroke-linecap="round"/>
+    <line x1="33.7" y1="246.0" x2="30.2" y2="257.6" stroke="#f4f1e6" stroke-width="9.0" stroke-linecap="round"/>
+    <line x1="70.0" y1="156.0" x2="63.4" y2="217.7" stroke="#6b6658" stroke-width="18.0" stroke-linecap="round"/>
+    <line x1="70.0" y1="156.0" x2="63.4" y2="217.7" stroke="#f4f1e6" stroke-width="12.0" stroke-linecap="round"/>
+    <line x1="63.4" y1="226.7" x2="61.0" y2="246.6" stroke="#6b6658" stroke-width="16.5" stroke-linecap="round"/>
+    <line x1="63.4" y1="226.7" x2="61.0" y2="246.6" stroke="#f4f1e6" stroke-width="10.5" stroke-linecap="round"/>
+    <line x1="61.0" y1="255.6" x2="59.4" y2="267.5" stroke="#6b6658" stroke-width="15.0" stroke-linecap="round"/>
+    <line x1="61.0" y1="255.6" x2="59.4" y2="267.5" stroke="#f4f1e6" stroke-width="9.0" stroke-linecap="round"/>
+    <line x1="88.0" y1="158.0" x2="89.4" y2="222.0" stroke="#6b6658" stroke-width="19.0" stroke-linecap="round"/>
+    <line x1="88.0" y1="158.0" x2="89.4" y2="222.0" stroke="#f4f1e6" stroke-width="13.0" stroke-linecap="round"/>
+    <line x1="89.4" y1="231.0" x2="89.9" y2="253.0" stroke="#6b6658" stroke-width="17.5" stroke-linecap="round"/>
+    <line x1="89.4" y1="231.0" x2="89.9" y2="253.0" stroke="#f4f1e6" stroke-width="11.5" stroke-linecap="round"/>
+    <line x1="89.9" y1="262.0" x2="90.2" y2="274.0" stroke="#6b6658" stroke-width="16.0" stroke-linecap="round"/>
+    <line x1="89.9" y1="262.0" x2="90.2" y2="274.0" stroke="#f4f1e6" stroke-width="10.0" stroke-linecap="round"/>
+    <line x1="106.0" y1="158.0" x2="113.0" y2="223.7" stroke="#6b6658" stroke-width="20.0" stroke-linecap="round"/>
+    <line x1="106.0" y1="158.0" x2="113.0" y2="223.7" stroke="#f4f1e6" stroke-width="14.0" stroke-linecap="round"/>
+    <line x1="113.0" y1="232.7" x2="115.6" y2="254.5" stroke="#6b6658" stroke-width="18.5" stroke-linecap="round"/>
+    <line x1="113.0" y1="232.7" x2="115.6" y2="254.5" stroke="#f4f1e6" stroke-width="12.5" stroke-linecap="round"/>
+    <line x1="115.6" y1="263.5" x2="117.4" y2="277.4" stroke="#6b6658" stroke-width="17.0" stroke-linecap="round"/>
+    <line x1="115.6" y1="263.5" x2="117.4" y2="277.4" stroke="#f4f1e6" stroke-width="11.0" stroke-linecap="round"/>
+    <line x1="126.0" y1="156.0" x2="137.5" y2="223.1" stroke="#6b6658" stroke-width="26.0" stroke-linecap="round"/>
+    <line x1="126.0" y1="156.0" x2="137.5" y2="223.1" stroke="#f4f1e6" stroke-width="20.0" stroke-linecap="round"/>
+    <line x1="137.5" y1="232.1" x2="142.9" y2="261.6" stroke="#6b6658" stroke-width="24.5" stroke-linecap="round"/>
+    <line x1="137.5" y1="232.1" x2="142.9" y2="261.6" stroke="#f4f1e6" stroke-width="18.5" stroke-linecap="round"/>
+    <line x1="142.9" y1="270.6" x2="147.0" y2="292.3" stroke="#6b6658" stroke-width="23.0" stroke-linecap="round"/>
+    <line x1="142.9" y1="270.6" x2="147.0" y2="292.3" stroke="#f4f1e6" stroke-width="17.0" stroke-linecap="round"/>
+  </g>
+</svg>

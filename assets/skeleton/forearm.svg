@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="420" viewBox="0 0 120 420">
+  <!-- radius (thumb side, left of picture) and ulna (inner side, right). Top = elbow -->
+  <g fill="#f4f1e6" stroke="#6b6658" stroke-width="6" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M82 6 C100 6 108 22 102 38 C98 48 92 52 90 60 C88 140 86 260 88 380 C96 386 98 404 86 410 C76 414 68 406 70 394 C70 270 68 150 70 62 C66 52 64 40 66 28 C68 14 74 6 82 6 Z"/>
+    <path d="M36 30 C48 26 56 34 54 46 C52 130 56 250 64 360 C74 368 78 390 66 404 C54 414 26 412 18 396 C12 384 18 368 30 362 C34 250 32 140 26 50 C24 38 28 32 36 30 Z"/>
+  </g>
+</svg>

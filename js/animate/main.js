@@ -184,93 +184,38 @@ async function loadPhoto(src) {
   work.done();
   show('cutout');
 }
-for (const id of ['#photoInput', '#fileInput']) {
-  $(id).onchange = e => {
-    const f = e.target.files[0];
-    e.target.value = '';
-    if (f) loadPhoto(URL.createObjectURL(f));
-  };
-}
+$('#fileInput').onchange = e => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (f) loadPhoto(URL.createObjectURL(f));
+};
 $('#exampleBtn').onclick = () => loadPhoto('assets/example-drawing.jpg');
 
-// ---- "Take a photo": the phone's own camera app on phones, a live webcam view on computers
-$('#photoBtn').onclick = () => (isPhone ? $('#photoInput').click() : openPhotoSheet());
-const photoVideo = $('#photoVideo');
-const photo = { stream: null, rotate: 0, raf: 0, camId: '', token: 0 };
-try { photo.camId = localStorage.getItem('photo-cam') || ''; photo.rotate = +(localStorage.getItem('photo-rotate') || 0); } catch {}
-
-async function startPhotoCamera() {
-  const token = ++photo.token;
-  stopStream(photo.stream); photo.stream = null;
-  $('#photoMsg').textContent = 'Starting camera…';
+// ---- a drawing from a web address. The address is kept in the page's link
+// (animate.html#drawing=…), so the link opens straight onto that drawing.
+async function loadDrawingUrl(url) {
+  let u;
+  try { u = new URL(url, location.href); if (!/^https?:$/.test(u.protocol)) throw 0; }
+  catch { toast('Enter a web address that starts with https://', { error: true }); return false; }
+  work.set('Downloading drawing…', null);
+  let blob;
   try {
-    // higher resolution than performing: drawings have fine lines
-    const r = await openCamera(photoVideo, { deviceId: photo.camId, facing: 'environment' });
-    if (token !== photo.token) { stopStream(r.stream); return; }
-    photo.stream = r.stream;
-    photo.camId = r.deviceId || '';
-    try { localStorage.setItem('photo-cam', photo.camId); } catch {}
-    await r.stream.getVideoTracks()[0]?.applyConstraints({ width: { ideal: 1920 }, height: { ideal: 1080 } }).catch(() => {});
-    photoCams.refresh();
-    $('#photoMsg').textContent = (await waitForFrames(photoVideo)) ? '' : 'The camera is on but not sending a picture. Close other apps using it, or choose another camera.';
+    const r = await fetch(u.href, { mode: 'cors' });
+    if (!r.ok) throw new Error(r.status);
+    blob = await r.blob();
+    if (!/^image\//.test(blob.type) && !/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(u.pathname)) throw new Error('not a picture');
   } catch (e) {
-    console.error(e);
-    if (token !== photo.token) return;
-    $('#photoMsg').textContent = cameraErrorMessage(e) + ' You can also use “Choose a picture”.';
-    photoCams.refresh();
+    console.warn(e);
+    work.done();
+    toast('That drawing couldn’t be downloaded. Use an address that goes straight to the picture (ending in .jpg or .png) on a site that allows sharing — your GitHub repo works.', { error: true, ms: 8000 });
+    return false;
   }
+  work.done();
+  history.replaceState(null, '', `${location.pathname}${location.search}#drawing=${encodeURIComponent(u.href)}`);
+  await loadPhoto(URL.createObjectURL(blob));
+  return true;
 }
-const photoCams = deviceList($('#photoCam'), {
-  kind: 'videoinput',
-  getCurrent: () => photo.stream?.getVideoTracks()[0]?.getSettings().deviceId || photo.camId,
-  onChange: id => { photo.camId = id; startPhotoCamera(); },
-});
-
-function drawPhotoFrame(target, v) {
-  const rot = ((photo.rotate % 360) + 360) % 360, side = rot % 180 !== 0;
-  const w = side ? v.videoHeight : v.videoWidth, h = side ? v.videoWidth : v.videoHeight;
-  if (target.width !== w || target.height !== h) { target.width = w; target.height = h; }
-  const g = target.getContext('2d');
-  g.save();
-  g.translate(w / 2, h / 2);
-  g.rotate((rot * Math.PI) / 180);
-  g.drawImage(v, -v.videoWidth / 2, -v.videoHeight / 2); // not mirrored, so writing reads the right way
-  g.restore();
-}
-
-function openPhotoSheet() {
-  $('#photoSheet').hidden = false;
-  startPhotoCamera();
-  const loop = () => {
-    if ($('#photoSheet').hidden) return;
-    photo.raf = requestAnimationFrame(loop);
-    if (photoVideo.readyState >= 2 && photoVideo.videoWidth) drawPhotoFrame($('#photoCanvas'), photoVideo);
-  };
-  cancelAnimationFrame(photo.raf);
-  loop();
-  $('#photoShoot').focus();
-}
-function closePhotoSheet() {
-  $('#photoSheet').hidden = true;
-  cancelAnimationFrame(photo.raf);
-  photo.token++;
-  stopStream(photo.stream); photo.stream = null;
-  photoVideo.srcObject = null;
-  $('#photoBtn').focus();
-}
-$('#photoCancel').onclick = closePhotoSheet;
-$('#photoRotate').onclick = () => { photo.rotate = (photo.rotate + 90) % 360; try { localStorage.setItem('photo-rotate', photo.rotate); } catch {} };
-$('#photoShoot').onclick = async () => {
-  if (!(photoVideo.readyState >= 2 && photoVideo.videoWidth)) { toast('The camera isn’t showing a picture yet.', { error: true }); return; }
-  const shot = document.createElement('canvas');
-  drawPhotoFrame(shot, photoVideo);
-  $('#photoCanvas').classList.add('flash-white');
-  setTimeout(() => $('#photoCanvas').classList.remove('flash-white'), 260);
-  const blob = await toBlob(shot, 'image/jpeg', 0.92);
-  closePhotoSheet();
-  if (blob) loadPhoto(URL.createObjectURL(blob));
-};
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#photoSheet').hidden) closePhotoSheet(); });
+$('#urlForm').onsubmit = e => { e.preventDefault(); loadDrawingUrl($('#drawingUrl').value.trim()); };
 
 async function renderSaved() {
   let items = [];
@@ -1412,4 +1357,8 @@ document.addEventListener('visibilitychange', async () => {
 
 // ------------------------------------------------------------------ start
 show('drawing');
+{
+  const linked = new URLSearchParams(location.hash.slice(1)).get('drawing');
+  if (linked) { $('#drawingUrl').value = linked; loadDrawingUrl(linked); }
+}
 window.__appReady = true;

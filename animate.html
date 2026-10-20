@@ -6,11 +6,11 @@
   <title>AR drawing animation</title>
   <meta name="description" content="Bring a drawing to life: the camera copies a real person's movements onto the drawn character. Runs in the browser — nothing is uploaded.">
   <meta name="theme-color" content="#101418">
-  <meta name="version" content="v14">
+  <meta name="version" content="v15">
   <script src="js/core/failsafe.js?v=5d27624d"></script>
   <link rel="icon" href="assets/sparkle.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/progress.css?v=c68c0312">
-  <link rel="stylesheet" href="css/animate.css?v=17b80167">
+  <link rel="stylesheet" href="css/animate.css?v=ef93730a">
 </head>
 <body>
   <header class="topbar">
@@ -29,18 +29,24 @@
     <section class="step" id="step-drawing" data-step="drawing">
       <div class="intro">
         <h1>AR drawing animation</h1>
-        <p>Draw one character, take a photo, then a partner films you moving — and your drawing copies you.</p>
+        <p>Draw one character, photograph it, then a partner films you moving — and your drawing copies you.</p>
         <ul class="tips">
           <li><b>Plain white paper</b>, thick dark lines.</li>
           <li><b>Stand it like a star:</b> arms and legs apart, not touching the body.</li>
-          <li>Photograph it flat, in good light, filling most of the photo.</li>
+          <li>Photograph or scan it flat, in good light, filling most of the picture.</li>
         </ul>
         <div class="big-buttons">
-          <button class="btn primary big" id="photoBtn" type="button">Take a photo</button>
-          <input type="file" id="photoInput" accept="image/*" capture="environment" hidden>
-          <label class="btn big file"><input type="file" id="fileInput" accept="image/*">Choose a picture</label>
+          <label class="btn primary big file"><input type="file" id="fileInput" accept="image/*">Choose a picture</label>
           <button class="btn big" id="exampleBtn" type="button">Try the example</button>
         </div>
+        <form class="url-form" id="urlForm">
+          <label for="drawingUrl">Or use a drawing from a web address</label>
+          <div class="url-row">
+            <input id="drawingUrl" type="url" inputmode="url" placeholder="https://… .jpg or .png" autocomplete="off" required>
+            <button class="btn" type="submit">Open</button>
+          </div>
+          <p class="fine">The page’s link then opens straight onto this drawing — handy to share. Pictures stored in your GitHub repo work best.</p>
+        </form>
         <div id="savedWrap" hidden>
           <h2>Your characters</h2>
           <p class="fine">Kept on this device only.</p>
@@ -144,23 +150,6 @@
     </section>
   </main>
 
-  <!-- webcam photo (computers) -->
-  <div class="sheet" id="photoSheet" hidden role="dialog" aria-modal="true" aria-labelledby="photoTitle">
-    <div class="sheet-card wide">
-      <h2 id="photoTitle">Take a photo of the drawing</h2>
-      <div class="photo-frame"><canvas id="photoCanvas" aria-label="Live camera view"></canvas><div class="photo-msg" id="photoMsg" aria-live="polite"></div></div>
-      <div class="photo-tools">
-        <label class="grow"><span class="sr">Camera</span><select id="photoCam" aria-label="Camera"></select></label>
-        <button class="btn" id="photoRotate" type="button" aria-label="Rotate the picture">⟳ Rotate</button>
-      </div>
-      <p class="fine">Hold the drawing flat, in good light, so it fills most of the picture. A document camera works brilliantly.</p>
-      <div class="btn-row">
-        <button class="btn" id="photoCancel" type="button">Cancel</button>
-        <button class="btn primary" id="photoShoot" type="button">Take photo</button>
-      </div>
-    </div>
-  </div>
-
   <!-- recording result -->
   <div class="sheet" id="resultSheet" hidden role="dialog" aria-modal="true" aria-labelledby="resultTitle">
     <div class="sheet-card">
@@ -194,9 +183,8 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
   <video id="camera" playsinline muted autoplay class="offscreen"></video>
-  <video id="photoVideo" playsinline muted autoplay class="offscreen"></video>
   <canvas id="glCanvas" class="offscreen"></canvas>
 
-  <script type="module" src="js/animate/main.js?v=ec09cf6e"></script>
+  <script type="module" src="js/animate/main.js?v=ba201c9b"></script>
 </body>
 </html>

@@ -193,16 +193,6 @@ select { min-height: 44px; padding: 6px 10px; background: var(--bg); border: 1px
 @media (prefers-reduced-motion: reduce) { .meter span { transition: none; } }
 
 .sheet-card.wide { width: min(760px, 100%); }
-.photo-frame { position: relative; background: #000; border-radius: 12px; overflow: hidden; aspect-ratio: 4 / 3; display: grid; place-items: center; }
-.photo-frame canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
-.photo-msg { position: absolute; inset: auto 12px 12px; text-align: center; color: #fff; text-shadow: 0 1px 4px #000; }
-.photo-msg:empty { display: none; }
-.photo-tools { display: flex; gap: 8px; margin-top: 10px; }
-.photo-tools .grow { flex: 1; min-width: 0; }
-.photo-tools select { width: 100%; }
-.flash-white { animation: flashw .25s; }
-@keyframes flashw { from { filter: brightness(3); } }
-@media (prefers-reduced-motion: reduce) { .flash-white { animation: none; } }
 
 .gif-options { display: grid; gap: 8px; margin: 8px 0; }
 .gif-options label { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; }
@@ -214,3 +204,10 @@ select { min-height: 44px; padding: 6px 10px; background: var(--bg); border: 1px
 #formatSeg .seg-btn { flex: 1; }
 .sheet-card { max-height: calc(100dvh - 32px); overflow-y: auto; }
 .sheet.see-through .sheet-card video { background: transparent; }
+
+/* drawing from a web address */
+.url-form { margin-top: 18px; }
+.url-form > label { display: block; font-weight: 600; margin-bottom: 6px; }
+.url-form .url-row { display: flex; gap: 8px; }
+.url-form input { flex: 1; min-width: 0; min-height: 44px; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; }
+.url-form input:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="70" height="210" viewBox="0 0 70 210">
+  <g fill="#f4f1e6" stroke="#6b6658" stroke-width="6" stroke-linejoin="round" stroke-linecap="round">
+    <rect x="20.0" y="6.0" width="30.0" height="22.0" rx="7"/>
+    <rect x="19.2" y="34.0" width="31.5" height="22.0" rx="7"/>
+    <rect x="18.5" y="62.0" width="33.0" height="22.0" rx="7"/>
+    <rect x="17.8" y="90.0" width="34.5" height="22.0" rx="7"/>
+    <rect x="17.0" y="118.0" width="36.0" height="22.0" rx="7"/>
+    <rect x="16.2" y="146.0" width="37.5" height="22.0" rx="7"/>
+    <rect x="15.5" y="174.0" width="39.0" height="22.0" rx="7"/>
+  </g>
+</svg>

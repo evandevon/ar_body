@@ -20,7 +20,7 @@ The camera needs `https://`, which GitHub Pages provides.
 
 ## AR drawing animation
 
-1. **Drawing** — take a photo of a drawing (or choose one, or *Try the example*). Best results: one character on plain white paper, thick dark lines, standing like a star with arms and legs apart and not touching the body.
+1. **Drawing** — choose a picture of the drawing, open one from a web address, or *Try the example*. A drawing opened from a web address is kept in the page's link (`animate.html#drawing=https://…`), so the link opens straight onto it. Best results: one character on plain white paper, thick dark lines, standing like a star with arms and legs apart and not touching the body.
 2. **Cut out** — the page removes the paper and evens out the lighting. White paper *inside* the outline stays part of the character. Paint with **Add / Erase** to fix mistakes; **Faint lines** picks up lighter pencil.
 3. **Joints** — drag the dots onto the head, neck, shoulders, elbows, hands, hips, knees and feet. Blue dots are limbs on the left of the picture, orange on the right. (Keyboard: Tab to the picture, `[` `]` choose a dot, arrows move it.)
 4. **Background** — pick a background (animated sunny day, night sky, under the sea, stage, **green screen**, **transparent**, a plain colour, your own picture, or the live camera), the camera to use, where the **camera in the corner** goes (or off), the video shape (wide / tall / square), the character's size, and whether it moves around when the performer does.
