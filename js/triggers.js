@@ -1,7 +1,7 @@
 // Pose triggers for AR Body Tracker: "when someone does this pose, show that picture/GIF/video".
 // Holds the list of triggers, checks them every frame, draws what they show, saves them in the
 // link/pack, and runs the Triggers window (where people pick a preset pose or capture their own).
-import { PRESETS, PRESET_BY_ID, PART_CHOICES, matchPose, captureSignature } from './poses.js?v=960207f4';
+import { PRESETS, PRESET_BY_ID, PART_CHOICES, matchPose, captureSignature } from './poses.js?v=dd7498cd';
 
 export const DEFAULT_CLOSE = 0.7; // default "close enough" — 70% match
 const DEFAULTS = { th: DEFAULT_CLOSE, hold: 0.3, size: 1, x: 0, y: 0, dur: 2, mode: 'time', parts: 'all', enabled: true };
@@ -9,7 +9,7 @@ const RELEASE = 0.08; // the match has to drop this far below "close enough" bef
 const FADE_IN = 120, FADE_OUT = 250; // ms
 
 // where each preset's effect appears by default
-const DEFAULT_PLACE = { handsTogether: 'betweenHands', handsUp: 'hat', leftHandUp: 'lHand', rightHandUp: 'rHand', tPose: 'chest', starJump: 'chest', squat: 'hips', handsOnHead: 'hat', handsOnHips: 'chest', armsCrossed: 'chest', kick: 'hips' };
+const DEFAULT_PLACE = { handsTogether: 'betweenHands', handsUp: 'hat', leftHandUp: 'lHand', rightHandUp: 'rHand', tPose: 'chest', starJump: 'chest', squat: 'hips', handsOnHead: 'hat', handsOnHips: 'chest', armsCrossed: 'chest', kick: 'hips', palmsOut: 'betweenHands', stopHand: 'chest' };
 const EFFECTS = [
   { file: 'assets/effects/energy-ball.gif', label: 'Energy ball' },
   { file: 'assets/effects/star-burst.gif', label: 'Star burst' },
@@ -43,7 +43,7 @@ export function createTriggers(deps) {
   const fromEntry = e => ({
     name: String(e.n || PRESET_BY_ID[e.p]?.label || 'My pose').slice(0, 40),
     pose: e.p === 'custom' || PRESET_BY_ID[e.p] ? e.p : 'handsTogether',
-    sig: Array.isArray(e.g) ? e.g.map(v => (v == null ? null : +v)).slice(0, 8) : null,
+    sig: Array.isArray(e.g) ? e.g.map(v => (v == null ? null : +v)).slice(0, 12) : null,
     parts: PART_CHOICES.some(c => c.id === e.pa) ? e.pa : 'all',
     th: Number.isFinite(+e.th) ? Math.min(0.99, Math.max(0.2, +e.th / 100)) : DEFAULTS.th,
     hold: Number.isFinite(+e.h) ? Math.min(5, Math.max(0, +e.h)) : DEFAULTS.hold,
@@ -305,7 +305,7 @@ export function createTriggers(deps) {
       const r = getLandmarks();
       if (!r) { deps.status('Nobody was in view — try again.', { error: true }); return; }
       draft.sig = captureSignature(r.lm, r.vw, r.vh);
-      if (draft.sig.filter(v => v != null).length < 2) { draft.sig = null; deps.status('Not enough of the body was in view — step back and try again.', { error: true }); }
+      if (draft.sig.slice(0, 8).filter(v => v != null).length < 2) { draft.sig = null; deps.status('Not enough of the body was in view — step back and try again.', { error: true }); }
       syncForm();
     };
     $('#tfSave').onclick = async () => {

@@ -61,7 +61,8 @@ Characters are kept on that device (browser storage) and appear under **Your cha
 
 **Pose triggers…** (in the settings) opens a side window, so the camera stays in view while you try poses out. A trigger shows a picture, GIF or video when someone strikes a pose. Animated GIFs and videos start from the beginning each time.
 
-- **Ready-made poses**: hands together, both hands up, left or right hand up, arms out (T-pose), star jump, squat, hands on head, hands on hips, arms crossed (X), kick.
+- **Ready-made poses**: hands together, both hands up, left or right hand up, arms out (T-pose), star jump, squat, hands on head, hands on hips, arms crossed (X), palms out (push), stop hand (one palm out), kick.
+- **Palms**: the tracker only sees the wrist and two knuckles of each hand, so which way a palm faces is an *estimate*. With the palm towards the camera, the index knuckle is on the thumb side; turn the hand round and the two knuckles swap sides. It works best with hands open, fairly flat to the camera and not too small in the picture. When the hand is edge-on it can't tell, so the palm is simply left out of the comparison. Captured poses remember which way the fingers point and, when clear, which way the palms face, so "palms out" and "backs of hands out" count as different poses. **Skeleton** view labels each hand *palm*, *back* or *?* with how sure it is.
 - **Your own pose**: choose *My own pose*, press **Capture**, and hold the pose through the 3-second countdown. Compare the whole body, the arms only, or the legs only. Mirroring doesn't matter.
 - **Close enough** (70% by default) is how closely the pose must match. Each trigger has a live bar showing the match right now, with a line at its close-enough level. **Hold the pose for** stops it firing by accident.
 - **Then show**: the *Energy ball* or *Star burst* (in `assets/effects/`), or any picture, GIF or video address. Choose where it appears (including *Between hands*), its size, and whether it shows for a set time or as long as the pose is held.
@@ -71,6 +72,7 @@ Characters are kept on that device (browser storage) and appear under **Your cha
 
 - **Skeleton** (toolbar button, the checkbox under Tracking, or press **S**) draws the tracked points and bones. Points the tracker is unsure about are drawn faded orange, each person is numbered, and the tracking speed (fps) shows in the corner.
 - **Show sticking points** labels every anchor the overlays can attach to.
+- Hand pictures turn with the hand itself (wrist to knuckles) when the knuckles can be seen clearly, and with the forearm otherwise.
 
 ## Packs (short links and QR codes)
 

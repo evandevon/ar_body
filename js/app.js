@@ -1,7 +1,8 @@
-import { ANCHORS, ANCHOR_BY_ID, computeAnchors, angleDiff } from './body.js?v=b9a1d706';
+import { ANCHORS, ANCHOR_BY_ID, computeAnchors, angleDiff } from './body.js?v=9a501ef9';
 import { openCamera, stopStream, cameraErrorMessage, deviceList, waitForFrames } from './core/camera.js?v=2afbfead';
 import { createProgress } from './core/progress.js?v=4da3a204';
-import { createTriggers } from './triggers.js?v=a9716f25';
+import { createTriggers } from './triggers.js?v=00302682';
+import { handInfo } from './poses.js?v=dd7498cd';
 
 const trackerProgress = createProgress();
 const mediaProgress = createProgress();
@@ -774,6 +775,18 @@ function drawSkeleton() {
     ctx.globalAlpha = 1;
     ctx.fillStyle = 'rgba(120, 255, 200, 1)';
     ctx.fillText(`#${n + 1}`, X(lm[0]) + lw * 5, lm[0].y * H - lw * 5);
+    // hands: which way the fingers point, and the guess at which side faces the camera
+    const hi = handInfo(lm, cam.videoWidth || W, cam.videoHeight || H);
+    for (const [s, w, ix, pk] of [['l', 15, 19, 17], ['r', 16, 20, 18]]) {
+      const h = hi[s];
+      if (!h) continue;
+      const kx = (X(lm[ix]) + X(lm[pk])) / 2, ky = (lm[ix].y + lm[pk].y) / 2 * H;
+      ctx.strokeStyle = '#ffd34d'; ctx.lineWidth = lw * 1.5;
+      ctx.beginPath(); ctx.moveTo(X(lm[w]), lm[w].y * H); ctx.lineTo(kx, ky); ctx.stroke();
+      const label = h.palm > 0.3 ? 'palm' : h.palm < -0.3 ? 'back' : '?';
+      ctx.fillStyle = h.palm > 0.3 ? '#ffd34d' : h.palm < -0.3 ? '#8fd3ff' : 'rgba(255,255,255,.7)';
+      ctx.fillText(`${label} ${Math.round(Math.abs(h.palm) * 100)}%`, kx + lw * 4, ky);
+    }
   });
   // tracking speed, handy when comparing accuracy settings
   if (state.fps) {

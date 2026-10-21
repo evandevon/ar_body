@@ -123,7 +123,10 @@ export function computeAnchors(lm, W, H, mirror) {
     const el = P(s + 'El'), wr = P(s + 'Wr');
     const hand = { ...avg(wr, P(s + 'Index'), P(s + 'Pinky')), v: wr.v };
     hands[s] = hand;
-    set(s + 'Hand', hand, ang(el, wr) + Math.PI / 2); // forearm pointing up = upright
+    // turns with the hand itself (wrist → knuckles) when the knuckles are clear, otherwise with the forearm
+    const ix = P(s + 'Index'), pk = P(s + 'Pinky'), knk = avg(ix, pk);
+    const clear = Math.min(ix.v, pk.v) > 0.5 && dist(wr, knk) > S * 0.08;
+    set(s + 'Hand', hand, (clear ? ang(wr, knk) : ang(el, wr)) + Math.PI / 2); // fingers / forearm pointing up = upright
 
     const kn = P(s + 'Knee'), an = P(s + 'Ank');
     const foot = { ...avg(an, P(s + 'Heel'), P(s + 'Toe')), v: an.v };

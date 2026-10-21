@@ -6,7 +6,8 @@
 // OWN left and right (their left hand is the one they'd call their left).
 
 // MediaPipe body point numbers (11 = the person's left shoulder, etc.)
-const P = { nose: 0, lEar: 7, rEar: 8, lSh: 11, rSh: 12, lEl: 13, rEl: 14, lWr: 15, rWr: 16, lHip: 23, rHip: 24, lKnee: 25, rKnee: 26, lAnk: 27, rAnk: 28 };
+const P = { nose: 0, lEar: 7, rEar: 8, lSh: 11, rSh: 12, lEl: 13, rEl: 14, lWr: 15, rWr: 16, lHip: 23, rHip: 24, lKnee: 25, rKnee: 26, lAnk: 27, rAnk: 28,
+  lPinky: 17, rPinky: 18, lIndex: 19, rIndex: 20 };
 
 const clamp01 = v => (v < 0 ? 0 : v > 1 ? 1 : v);
 /** 1 when x has reached `full`, 0 when it's at `zero`, straight line in between (either direction). */
@@ -30,6 +31,44 @@ function points(lm, vw, vh) {
   return pt;
 }
 const seen = (pt, ...keys) => keys.every(k => pt[k].v > 0.5);
+
+// ---- hands, from the body tracker's rough hand points (wrist + index and little-finger knuckles)
+/**
+ * For one hand ('l' or 'r' — the person's own): which way the fingers point, and a GUESS at
+ * whether the palm faces the camera.
+ *   dir:  angle of wrist → knuckles, degrees, relative to the body's "up" (0 = fingers up),
+ *         measured towards the person's own left, so it's the same mirrored or not
+ *   palm: -1 (back of the hand to the camera) … +1 (palm to the camera); near 0 = can't tell
+ *         (hand edge-on, or too small to see)
+ * How the palm guess works: with the palm towards the camera, the index knuckle is on the
+ * thumb side — towards the body's middle for a hand held up. Turn the hand round and the index
+ * and little-finger knuckles swap sides. Which side is "thumb side" depends on which hand it is
+ * and whether the person faces the camera or has their back to it, so both are allowed for.
+ */
+function handOf(pt, s) {
+  const wr = pt[s + 'Wr'], ix = pt[s + 'Index'], pk = pt[s + 'Pinky'];
+  if (!(wr.v > 0.5 && ix.v > 0.3 && pk.v > 0.3)) return null;
+  const k = mid(ix, pk);
+  const d = { x: k.x - wr.x, y: k.y - wr.y }, t = { x: ix.x - pk.x, y: ix.y - pk.y };
+  const dl = Math.hypot(d.x, d.y), tl = Math.hypot(t.x, t.y);
+  if (dl < pt.S * 0.05) return null; // hand too small to judge
+  const facing = Math.sign(pt.lSh.x - pt.rSh.x) || 1; // +1: facing the camera (raw, unmirrored picture)
+  const up = Math.atan2(pt.shMid.y - pt.hipMid.y, pt.shMid.x - pt.hipMid.x);
+  let dir = deg(Math.atan2(d.y, d.x) - up);
+  dir = (((dir + 540) % 360) - 180) * facing;
+  // sine of the angle between "fingers" and "across the knuckles"; its sign says which side the index knuckle is on
+  const cross = (d.x * t.y - d.y * t.x) / (dl * (tl || 1));
+  const spread = ramp(tl / dl, 0.12, 0.4); // knuckles close together = hand edge-on = unsure
+  const palm = Math.max(-1, Math.min(1, (s === 'l' ? -cross : cross) * facing * spread * 1.4));
+  return { dir, palm };
+}
+/** Both hands' direction and palm guess for one person (raw landmarks), for display and triggers. */
+export function handInfo(lm, vw, vh) {
+  const pt = points(lm, vw, vh);
+  return { l: handOf(pt, 'l'), r: handOf(pt, 'r') };
+}
+const palmOut = h => (h ? ramp(h.palm, 0.1, 0.55) : 0);
+const fingersUp = h => (h ? ramp(Math.abs(h.dir), 70, 30) : 0);
 
 // ---- preset poses: (pt) => 0..1, or null if the needed body parts can't be seen
 export const PRESETS = [
@@ -82,6 +121,18 @@ export const PRESETS = [
       const chest = Math.min(ramp(Math.abs(pt.lWr.y - pt.shMid.y) / pt.S, 1.4, 0.8), ramp(Math.abs(pt.rWr.y - pt.shMid.y) / pt.S, 1.4, 0.8));
       return Math.min(l, r, chest);
     } },
+  { id: 'palmsOut', label: 'Palms out (push)', icon: '🫸', needs: ['lWr', 'rWr', 'lSh', 'rSh'],
+    score: pt => {
+      const l = handOf(pt, 'l'), r = handOf(pt, 'r');
+      if (!l || !r) return 0;
+      const raised = Math.min(ramp((pt.hipMid.y - pt.lWr.y) / pt.S, 0.4, 0.9), ramp((pt.hipMid.y - pt.rWr.y) / pt.S, 0.4, 0.9));
+      return Math.min(palmOut(l), palmOut(r), fingersUp(l), fingersUp(r), raised);
+    } },
+  { id: 'stopHand', label: 'Stop hand (one palm out)', icon: '✋', needs: ['lSh', 'rSh'],
+    score: pt => {
+      const one = s => { const h = handOf(pt, s); return h ? Math.min(palmOut(h), fingersUp(h), ramp((pt.hipMid.y - pt[s + 'Wr'].y) / pt.S, 0.6, 1.1)) : 0; };
+      return Math.max(one('l'), one('r'));
+    } },
   { id: 'kick', label: 'Kick (either leg)', icon: '🦵', needs: ['lAnk', 'rAnk'],
     score: pt => Math.max(ramp((pt.rAnk.y - pt.lAnk.y) / pt.S, 0.25, 0.8), ramp((pt.lAnk.y - pt.rAnk.y) / pt.S, 0.25, 0.8)) },
 ];
@@ -94,6 +145,9 @@ const SEGMENTS = [
   ['lThigh', 'lHip', 'lKnee', 'legs'], ['lShin', 'lKnee', 'lAnk', 'legs'],
   ['rThigh', 'rHip', 'rKnee', 'legs'], ['rShin', 'rKnee', 'rAnk', 'legs'],
 ];
+// after the 8 limb parts, a captured pose also stores each hand's direction and palm guess:
+// [8] left hand direction, [9] right hand direction (degrees), [10] left palm, [11] right palm (-100…100)
+const HAND_SLOTS = 4;
 export const PART_CHOICES = [
   { id: 'all', label: 'Whole body' },
   { id: 'arms', label: 'Arms only' },
@@ -106,12 +160,14 @@ export function captureSignature(lm, vw, vh) {
   const up = Math.atan2(pt.shMid.y - pt.hipMid.y, pt.shMid.x - pt.hipMid.x);
   // mirror-proof: measure sideways angles from the person's left, whichever way they appear
   const flip = Math.sign(pt.lSh.x - pt.rSh.x) || 1;
-  return SEGMENTS.map(([, a, b]) => {
+  const limbs = SEGMENTS.map(([, a, b]) => {
     if (!seen(pt, a, b)) return null;
     let d = deg(Math.atan2(pt[b].y - pt[a].y, pt[b].x - pt[a].x) - up);
     d = ((d + 540) % 360) - 180;
     return Math.round(d * flip);
   });
+  const l = handOf(pt, 'l'), r = handOf(pt, 'r');
+  return [...limbs, l ? Math.round(l.dir) : null, r ? Math.round(r.dir) : null, l ? Math.round(l.palm * 100) : null, r ? Math.round(r.palm * 100) : null];
 }
 
 function similarity(sig, lm, vw, vh, parts = 'all') {
@@ -125,6 +181,21 @@ function similarity(sig, lm, vw, vh, parts = 'all') {
     sum += d; n++;
   });
   if (n < 2) return null;
+  if (parts !== 'legs') {
+    // hand directions count like limb parts…
+    for (const i of [8, 9]) {
+      if (sig[i] == null || now[i] == null) continue;
+      let d = Math.abs(sig[i] - now[i]) % 360;
+      if (d > 180) d = 360 - d;
+      sum += d; n++;
+    }
+    // …and the palm guess only when it was clear both times: palm vs back of hand counts as
+    // being 180° out, so a captured "palms out" won't match "backs of hands out"
+    for (const i of [10, 11]) {
+      if (sig[i] == null || now[i] == null || Math.abs(sig[i]) < 35 || Math.abs(now[i]) < 35) continue;
+      sum += Math.sign(sig[i]) === Math.sign(now[i]) ? 0 : 180; n++;
+    }
+  }
   return ramp(sum / n, 50, 5); // 5° or less off on average = 100%; 50° or more = 0%
 }
 

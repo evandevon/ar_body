@@ -1,5 +1,12 @@
 # Changelog
 
+## v16
+- **Palm estimate.** Each hand's direction comes from the wrist and knuckles, plus a guess at whether the palm or the back of the hand faces the camera. The guess comes from which side the index knuckle is on.
+- New ready-made poses: **Palms out (push)** and **Stop hand (one palm out)**.
+- Captured poses now include hand direction and, when it's clear, which way the palms face, so "palms out" and "backs of hands out" count as different poses. Triggers captured before v16 still work.
+- Skeleton view labels each hand *palm*, *back* or *?*, with how sure the guess is.
+- Hand pictures turn with the hand (wrist to knuckles) rather than with the forearm, when the knuckles are clear.
+
 ## v15
 - AR drawing animation: the **Take a photo** button is gone. Drawings now come from **Choose a picture**, *Try the example*, or a new **web address** box. A drawing opened from a web address is saved in the page's link (`animate.html#drawing=…`), so sharing the link shares the drawing.
 
