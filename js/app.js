@@ -1,3 +1,16 @@
+// AR Body Tracker (tracker.html) — main script.
+// Live camera + MediaPipe pose → "anchors" (body.js) → pictures/GIFs/videos drawn on the canvas,
+// plus pose triggers (triggers.js + poses.js). The whole layout lives in the page link (#l=…)
+// or a pack file (#pack=<id> → packs/<id>.json).
+//
+// Sections (search for the "// ----" headings):
+//   body tracker · camera · media loading (image/video/GIF via ImageDecoder) · overlays ·
+//   overlay cards (UI) · layout stored in the link (serialise/normalise/applyLayout, short keys) ·
+//   packs (resolvePack, signature → short link while unchanged) · QR code · tracking + drawing
+//   (updatePeople smoothing, drawOverlay, drawSkeleton, frame loop) · snapshot + recording ·
+//   wiring · start
+// Link format: '#l=' + 'z' + base64url(deflate-raw(JSON)); JSON = { v, p (people), q (model),
+//   o: [overlays, short keys a/s/x/y/r/o/f/m/sd/vi, defaults omitted], t: [triggers], pk? }.
 import { ANCHORS, ANCHOR_BY_ID, computeAnchors, angleDiff } from './body.js?v=9a501ef9';
 import { openCamera, stopStream, cameraErrorMessage, deviceList, waitForFrames } from './core/camera.js?v=2afbfead';
 import { createProgress } from './core/progress.js?v=4da3a204';

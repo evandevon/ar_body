@@ -1,3 +1,17 @@
+// AR drawing animation (animate.html) — main script.
+// Steps: 1 drawing (choose a picture / example / web address, kept as #drawing=…) → 2 cut out
+// (cutout.js) → 3 joints (rig.js) → 4 background ("scene" internally; backgrounds.js) →
+// 5 perform: camera → MediaPipe → Puppet (rig.js) → WebGL (renderer.js) → 2D stage canvas.
+//
+// Recording (section "5. perform" → "recording"):
+//   • Transparent background + WebCodecs available → the page's own recorder
+//     (core/alpha-video.js + alpha-worker.js): colour and see-through layer as two VP9 streams,
+//     joined in one WebM. Needed because many computers' MediaRecorder silently drops alpha.
+//   • Otherwise MediaRecorder (WebM VP9, or MP4 on Safari) → core/webm-fix.js rebuild, then
+//     alphaFrameCount() checks the transparency really is there (warns if not).
+//   • Save window converts one take to WebM / MP4 / GIF: makeGif (own-alpha → decodeFrames,
+//     else seek the <video>), rerecord / rerecordFromFrames (green-screen MP4, paced to the
+//     decoder so the ending is never lost). GIFs are encoded in core/gif-worker.js (gifenc).
 import { findCharacter, paperMap, applyEdits, cutOut, maskFromAlpha } from './cutout.js?v=af729520';
 import { JOINTS, LINKS, guessJoints, buildRig, Puppet, readPerformer } from './rig.js?v=3734807e';
 import { PuppetRenderer } from './renderer.js?v=b2e675e8';

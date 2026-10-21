@@ -1,5 +1,8 @@
 # Changelog
 
+## v17
+- No changes to how anything works. Added header comments to the main scripts and stylesheets, for developers.
+
 ## v16
 - **Palm estimate.** Each hand's direction comes from the wrist and knuckles, plus a guess at whether the palm or the back of the hand faces the camera. The guess comes from which side the index knuckle is on.
 - New ready-made poses: **Palms out (push)** and **Stop hand (one palm out)**.
