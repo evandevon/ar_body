@@ -57,16 +57,19 @@ Characters are kept on that device (browser storage) and appear under **Your cha
 - **↑ / ↓** change which overlay is in front. **⧉** duplicates.
 - **People** tracks up to 4 people; every overlay is applied to each person.
 
-### Pose triggers
+### Pose triggers and "When to show?"
 
-**Pose triggers…** (in the settings) opens a side window, so the camera stays in view while you try poses out. A trigger shows a picture, GIF or video when someone strikes a pose. Animated GIFs and videos start from the beginning each time.
+Every overlay card starts with **When to show?** — *All the time*, or when a pose is done. Pick a pose, then choose whether the overlay shows **for a set time** (2 seconds by default) or **as long as the pose is held**. It appears only on the person doing the pose, fades in and out, and animated GIFs and videos start from the beginning each time. Cards on a pose say so under their name (e.g. *Between hands · ⚡ Energy ball*).
 
+The poses themselves are set up in **Set up pose triggers…** (in the settings). It opens a side window, so the camera stays in view while you try poses out. You can also choose **+ New pose trigger…** straight from an overlay's *When to show?* list; when you save, that overlay is linked to it.
+
+- **Effects:** the *Energy ball* and *Star burst* buttons under the address box add those effects (from `assets/effects/`) as overlays, already placed between the hands or above the head. Any picture, GIF or video address works too.
 - **Ready-made poses**: hands together, both hands up, left or right hand up, arms out (T-pose), star jump, squat, hands on head, hands on hips, arms crossed (X), palms out (push), stop hand (one palm out), kick.
 - **Palms**: the tracker only sees the wrist and two knuckles of each hand, so which way a palm faces is an *estimate*. With the palm towards the camera, the index knuckle is on the thumb side; turn the hand round and the two knuckles swap sides. It works best with hands open, fairly flat to the camera and not too small in the picture. When the hand is edge-on it can't tell, so the palm is simply left out of the comparison. Captured poses remember which way the fingers point and, when clear, which way the palms face, so "palms out" and "backs of hands out" count as different poses. **Skeleton** view labels each hand *palm*, *back* or *?* with how sure it is.
 - **Your own pose**: choose *My own pose*, press **Capture**, and hold the pose through the 3-second countdown. Compare the whole body, the arms only, or the legs only. Mirroring doesn't matter.
 - **Close enough** (70% by default) is how closely the pose must match. Each trigger has a live bar showing the match right now, with a line at its close-enough level. **Hold the pose for** stops it firing by accident.
-- **Then show**: the *Energy ball* or *Star burst* (in `assets/effects/`), or any picture, GIF or video address. Choose where it appears (including *Between hands*), its size, and whether it shows for a set time or as long as the pose is held.
-- Triggers are saved in the link and in packs. The **Energy poses** pack has two: hands together makes an energy ball, and both hands up makes a star burst.
+- The trigger list shows which overlays each pose shows. One pose can show several overlays (e.g. an energy ball *and* a glow), and turning a trigger off (●/○) stops all of them. Removing a trigger switches its overlays to *All the time*.
+- Triggers are saved in the link and in packs. The **Energy poses** pack has two: hands together makes an energy ball, and both hands up makes a star burst. Links made before v18 still open; their trigger pictures become overlays linked to the pose.
 
 ### Debugging
 

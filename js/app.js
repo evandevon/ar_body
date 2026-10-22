@@ -1,6 +1,7 @@
 // AR Body Tracker (tracker.html) — main script.
-// Live camera + MediaPipe pose → "anchors" (body.js) → pictures/GIFs/videos drawn on the canvas,
-// plus pose triggers (triggers.js + poses.js). The whole layout lives in the page link (#l=…)
+// Live camera + MediaPipe pose → "anchors" (body.js) → pictures/GIFs/videos drawn on the canvas.
+// Each overlay shows all the time, or only when a pose trigger fires ("When to show?"; the poses
+// themselves are set up in triggers.js + poses.js). The whole layout lives in the page link (#l=…)
 // or a pack file (#pack=<id> → packs/<id>.json).
 //
 // Sections (search for the "// ----" headings):
@@ -9,12 +10,15 @@
 //   packs (resolvePack, signature → short link while unchanged) · QR code · tracking + drawing
 //   (updatePeople smoothing, drawOverlay, drawSkeleton, frame loop) · snapshot + recording ·
 //   wiring · start
-// Link format: '#l=' + 'z' + base64url(deflate-raw(JSON)); JSON = { v, p (people), q (model),
-//   o: [overlays, short keys a/s/x/y/r/o/f/m/sd/vi, defaults omitted], t: [triggers], pk? }.
+// Link format: '#l=' + 'z' + base64url(deflate-raw(JSON)); JSON = { v: 2, p (people), q (model),
+//   o: [overlays, short keys a/s/x/y/r/o/f/m/sd/vi, w (trigger number, 1 = first), wm (while
+//   held), d (seconds); defaults omitted], t: [triggers (pose only)], pk? }.
+//   Before v18 (v: 1) each trigger carried its own picture (u/a/s/x/y/wm/d): `upgradeLayout`
+//   turns those into an overlay linked to the trigger.
 import { ANCHORS, ANCHOR_BY_ID, computeAnchors, angleDiff } from './body.js?v=9a501ef9';
 import { openCamera, stopStream, cameraErrorMessage, deviceList, waitForFrames } from './core/camera.js?v=2afbfead';
 import { createProgress } from './core/progress.js?v=4da3a204';
-import { createTriggers } from './triggers.js?v=00302682';
+import { createTriggers } from './triggers.js?v=3677f1c1';
 import { handInfo } from './poses.js?v=dd7498cd';
 
 const trackerProgress = createProgress();
@@ -226,7 +230,9 @@ async function loadGif(src) {
 
 // ---------------------------------------------------------------- overlays
 let nextId = 1;
-const DEFAULTS = { anchor: 'head', size: 1, x: 0, y: 0, rot: 0, opacity: 1, follow: true, flip: false, side: false, visible: true };
+// held/dur only matter when the overlay shows on a trigger (o.trig): as long as the pose is held,
+// or for dur seconds
+const DEFAULTS = { anchor: 'head', size: 1, x: 0, y: 0, rot: 0, opacity: 1, follow: true, flip: false, side: false, visible: true, held: false, dur: 2 };
 
 const nameFromUrl = src => {
   try { const u = new URL(src); return decodeURIComponent(u.pathname.split('/').filter(Boolean).pop() || u.hostname); }
@@ -244,7 +250,7 @@ async function addOverlay({ src, settings = {} }) {
     console.error(e);
     setStatus(`Couldn’t load “${name}”. Check the address goes straight to a picture or video file.`, { error: true, sticky: true });
   }
-  const o = { id: nextId++, src, name, kind, media, ...DEFAULTS, ...settings };
+  const o = { id: nextId++, src, name, kind, media, trig: null, ...DEFAULTS, ...settings };
   if (!ANCHOR_BY_ID[o.anchor]) o.anchor = DEFAULTS.anchor;
   state.overlays.push(o);
   renderCard(o);
@@ -260,6 +266,7 @@ function removeOverlay(o, { save = true } = {}) {
   o.media?.frames?.forEach(f => f.bmp.close());
   o.card?.remove();
   updateEmpty();
+  triggers.renderList();
   if (save) saveToLink();
 }
 
@@ -340,7 +347,7 @@ function renderCard(o) {
   title.textContent = o.name;
   const where = document.createElement('span');
   where.className = 'where';
-  const syncWhere = () => (where.textContent = ANCHOR_BY_ID[o.anchor]?.label.replace(/ \(.*\)/, '') ?? '');
+  const syncWhere = () => (where.textContent = (ANCHOR_BY_ID[o.anchor]?.label.replace(/ \(.*\)/, '') ?? '') + (o.trig ? ` · ⚡ ${o.trig.name}` : ''));
   syncWhere();
   const words = document.createElement('span');
   words.className = 'words';
@@ -361,6 +368,57 @@ function renderCard(o) {
   const body = document.createElement('div');
   body.className = 'card-body';
   body.id = `${uid}-body`;
+
+  // When to show? All the time, or when a pose trigger fires (then for how long)
+  const wWrap = document.createElement('label');
+  wWrap.className = 'row when';
+  wWrap.innerHTML = '<span>When to show?</span>';
+  const wSel = document.createElement('select');
+  wSel.dataset.k = 'when';
+  wWrap.append(wSel);
+  const more = document.createElement('div');
+  more.className = 'when-more';
+  const hWrap = document.createElement('label');
+  hWrap.className = 'row';
+  hWrap.innerHTML = '<span>For</span>';
+  const hSel = document.createElement('select');
+  hSel.append(new Option('a set time', 'time'), new Option('as long as the pose is held', 'held'));
+  hSel.value = o.held ? 'held' : 'time';
+  hSel.onchange = () => { o.held = hSel.value === 'held'; o.refreshWhen(); };
+  hWrap.append(hSel);
+  const dRow = document.createElement('div');
+  dRow.className = 'row slider';
+  dRow.innerHTML = `<label for="${uid}-dur">How long</label><output for="${uid}-dur"></output>`;
+  const dInp = Object.assign(document.createElement('input'), { type: 'range', id: `${uid}-dur`, min: 0.5, max: 10, step: 0.5, value: o.dur });
+  const dSync = () => { o.dur = +dInp.value; dRow.querySelector('output').textContent = `${o.dur.toFixed(1)} s`; };
+  dInp.oninput = dSync;
+  dSync();
+  dRow.append(dInp);
+  more.append(hWrap, dRow);
+  o.refreshWhen = () => {
+    wSel.innerHTML = '';
+    wSel.append(new Option('All the time', ''));
+    const g = document.createElement('optgroup');
+    g.label = 'When a pose is done';
+    for (const t of triggers.list) g.append(new Option(`${triggers.poseIcon(t)} ${t.name}`, String(t.id)));
+    g.append(new Option('+ New pose trigger…', 'new'));
+    wSel.append(g);
+    wSel.value = o.trig ? String(o.trig.id) : '';
+    more.hidden = !o.trig;
+    dRow.hidden = o.held;
+    syncWhere();
+  };
+  wSel.onchange = () => {
+    if (wSel.value === 'new') {
+      triggers.openNew(t => { if (t) o.trig = t; o.refreshWhen(); triggers.renderList(); saveToLink(); });
+      return;
+    }
+    o.trig = triggers.list.find(t => String(t.id) === wSel.value) || null;
+    o.refreshWhen();
+    triggers.renderList();
+  };
+  o.refreshWhen();
+  body.append(wWrap, more);
 
   const aWrap = document.createElement('label');
   aWrap.className = 'row';
@@ -446,38 +504,69 @@ async function duplicateOverlay(o) {
   await addOverlay({ src: o.src, settings });
 }
 
-const pickSettings = o => Object.fromEntries(Object.keys(DEFAULTS).map(k => [k, o[k]]));
+const pickSettings = o => ({ ...Object.fromEntries(Object.keys(DEFAULTS).map(k => [k, o[k]])), trig: o.trig });
 
 // ---------------------------------------------------------------- layout stored in the link
 // The whole layout lives after the # in the address: #l=<compressed settings>.
 // Only web addresses of the pictures/videos are stored, so the link works anywhere.
-const SHORT = { anchor: 'a', size: 's', x: 'x', y: 'y', rot: 'r', opacity: 'o', follow: 'f', flip: 'm', side: 'sd', visible: 'vi' };
+const SHORT = { anchor: 'a', size: 's', x: 'x', y: 'y', rot: 'r', opacity: 'o', follow: 'f', flip: 'm', side: 'sd', visible: 'vi', held: 'wm', dur: 'd' };
+const WHEN_KEYS = ['held', 'dur']; // only saved for overlays that show on a trigger
 const LONG = Object.fromEntries(Object.entries(SHORT).map(([k, v]) => [v, k]));
 const round = v => (typeof v === 'number' ? Math.round(v * 1000) / 1000 : v);
 
-const entryOf = (src, settings) => {
+/** w = number of the trigger it shows on (1 = first), or 0 for "all the time" */
+const entryOf = (src, settings, w = 0) => {
   const e = { u: src };
+  if (w) e.w = w;
   for (const [k, sk] of Object.entries(SHORT)) {
+    if (!w && WHEN_KEYS.includes(k)) continue;
     const v = settings[k] ?? DEFAULTS[k];
     if (v !== DEFAULTS[k]) e[sk] = typeof v === 'boolean' ? +v : round(v);
   }
   return e;
 };
 function serialise() {
-  const out = { v: 1, p: state.numPoses, q: state.model, o: state.overlays.map(o => entryOf(o.src, o)) };
+  const out = { v: 2, p: state.numPoses, q: state.model, o: state.overlays.map(o => entryOf(o.src, o, o.trig ? triggers.list.indexOf(o.trig) + 1 : 0)) };
   const t = triggers.serialise();
   if (t.length) out.t = t; // pose triggers
   return out;
 }
 /** The layout a link/pack describes, in the same form as serialise(), without loading it. */
 function normalise(data) {
+  data = upgradeLayout(data);
+  const t = triggers.normalise(data.t);
   return {
-    v: 1,
+    v: 2,
     p: [1, 2, 3, 4].includes(data.p) ? data.p : state.numPoses,
     q: ['lite', 'full', 'heavy'].includes(data.q) ? data.q : state.model,
-    o: (data.o || []).filter(e => typeof e?.u === 'string' && /^https?:/i.test(e.u)).map(e => entryOf(e.u, parseEntry(e))),
-    ...(Array.isArray(data.t) && data.t.length ? { t: triggers.normalise(data.t) } : {}),
+    o: (data.o || []).filter(e => typeof e?.u === 'string' && /^https?:/i.test(e.u)).map(e => entryOf(e.u, parseEntry(e), whenOf(e, t.length))),
+    ...(t.length ? { t } : {}),
   };
+}
+/** The trigger number an overlay entry shows on, if that trigger exists (else 0 = all the time). */
+const whenOf = (e, count) => (Number.isInteger(+e.w) && +e.w >= 1 && +e.w <= count ? +e.w : 0);
+
+/** Links/packs from before v18 kept a picture inside each trigger: move it into an overlay. */
+function upgradeLayout(data) {
+  const t = Array.isArray(data.t) ? data.t : [];
+  if (!t.some(e => e && typeof e === 'object' && 'u' in e)) return data;
+  const o = [...(Array.isArray(data.o) ? data.o : [])];
+  const poses = [];
+  for (const e of t) {
+    if (!e || typeof e !== 'object') continue;
+    const { u, a, s, x, y, wm, d, ...pose } = e;
+    poses.push(pose);
+    if (typeof u !== 'string' || !u) continue;
+    const anchor = ANCHOR_BY_ID[a] ? a : 'chest';
+    const ov = { u, w: poses.length, a: anchor };
+    if (s != null) ov.s = s;
+    if (x) ov.x = x;
+    if (y) ov.y = y;
+    if (anchor === 'betweenHands') ov.f = 0; // effects between the hands didn't tilt
+    if (wm) ov.wm = 1; else if (d != null) ov.d = d;
+    o.push(ov); // triggered pictures were drawn in front of everything
+  }
+  return { ...data, o, t: poses };
 }
 function parseEntry(e) {
   const settings = {};
@@ -522,8 +611,10 @@ async function writeLink() {
 
 async function applyLayout(data) {
   applying = true;
+  data = upgradeLayout(data);
   try {
     [...state.overlays].forEach(o => removeOverlay(o, { save: false }));
+    triggers.load(data.t);
     if ([1, 2, 3, 4].includes(data.p) && data.p !== state.numPoses) {
       state.numPoses = data.p; $('#people').value = String(data.p);
       try { await state.landmarker?.setOptions({ numPoses: data.p }); } catch {}
@@ -537,9 +628,10 @@ async function applyLayout(data) {
       if (list.length > 2) mediaProgress.set('Loading overlays…', done / list.length, `${done} of ${list.length}`);
       done++;
       if (typeof e?.u !== 'string' || !/^https?:\/\//i.test(e.u)) continue;
-      await addOverlay({ src: e.u, settings: parseEntry(e) });
+      const w = whenOf(e, triggers.list.length);
+      await addOverlay({ src: e.u, settings: { ...parseEntry(e), trig: w ? triggers.list[w - 1] : null } });
     }
-    await triggers.load((Array.isArray(data.t) ? data.t : []).filter(e => typeof e?.u === 'string' && /^https?:\/\//i.test(e.u)));
+    triggers.renderList();
   } finally {
     mediaProgress.done();
     applying = false;
@@ -557,22 +649,28 @@ state.pack = null; // { id, sig } of the pack currently loaded
 
 /** Turns a pack file's picture paths ("assets/bone.svg") into full addresses. */
 function resolvePack(data) {
-  return { ...data, o: (data.o || []).map(e => ({ ...e, u: new URL(e.u, SITE).href })), t: triggers.resolve(data.t) };
+  const abs = e => (e && typeof e.u === 'string' ? { ...e, u: new URL(e.u, SITE).href } : e);
+  return { ...data, o: (data.o || []).map(abs), t: Array.isArray(data.t) ? data.t.map(abs) : data.t }; // (old packs: pictures inside triggers)
 }
 
-// pose triggers: "when someone does this pose, show that"
+// pose triggers: "someone is doing this pose" — overlays choose one under "When to show?"
 const triggers = createTriggers({
-  loadMedia: async src => {
-    const kind = kindOf('', src);
-    const media = kind === 'video' ? await loadVideo(src) : kind === 'gif' ? await loadGif(src) : await loadImage(src);
-    return { media, kind };
-  },
-  drawItem: (item, a, t) => drawOverlay(item, a, t),
-  anchors: ANCHORS,
   save: () => saveToLink(),
-  site: SITE.href,
   status: (msg, o) => setStatus(msg, o),
+  usedBy: t => state.overlays.filter(o => o.trig === t).map(o => o.name),
+  changed: () => state.overlays.forEach(o => o.refreshWhen?.()),
+  onRemove: t => state.overlays.forEach(o => { if (o.trig === t) o.trig = null; }),
+  onFire: t => {
+    // videos start from the beginning each time (GIFs are timed from the moment it fired)
+    for (const o of state.overlays) if (o.trig === t && o.kind === 'video' && o.media?.el) { o.media.el.currentTime = 0; o.media.el.play().catch(() => {}); }
+  },
 });
+
+// ready-made effects (Effects: buttons under the address box)
+const EFFECTS = [
+  { file: 'assets/effects/energy-ball.gif', label: 'Energy ball', settings: { anchor: 'betweenHands', size: 1.3, follow: false } },
+  { file: 'assets/effects/star-burst.gif', label: 'Star burst', settings: { anchor: 'hat', size: 2.6 } },
+];
 const signature = () => JSON.stringify(serialise());
 
 async function fetchPack(id) {
@@ -643,7 +741,6 @@ function savePackFile() {
     return u.origin === location.origin && u.pathname.startsWith(SITE.pathname) ? { ...e, u: decodeURIComponent(u.pathname.slice(SITE.pathname.length)) } : e;
   };
   data.o = data.o.map(local);
-  if (data.t) data.t = data.t.map(local);
   const name = prompt('Name for this pack (shown on the Packs button):', state.pack?.id || 'My pack');
   if (name == null) return;
   const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'my-pack';
@@ -724,9 +821,10 @@ const fade = v => Math.min(1, Math.max(0, (v - 0.35) / 0.3));
 // typical bone length as a multiple of shoulder width, so tilting works from the first moment
 const BONE_PRIOR = { lUpperArm: 0.8, rUpperArm: 0.8, lForearm: 0.7, rForearm: 0.7, lThigh: 1.05, rThigh: 1.05, lShin: 1.05, rShin: 1.05, spine: 1.3 };
 
-function drawOverlay(o, a, now) {
+/** mul: extra see-through (fading in/out on a trigger); now: time for GIF frames */
+function drawOverlay(o, a, now, mul = 1) {
   if (!o.media || !o.visible) return;
-  const alpha = o.opacity * fade(a.vis);
+  const alpha = o.opacity * fade(a.vis) * mul;
   if (alpha < 0.01) return;
   const f = currentFrame(o, now);
   if (f.ready === false || !f.w || !f.h) return;
@@ -856,15 +954,20 @@ function frame(now) {
   ctx.restore();
 
   if (state.skeleton) drawSkeleton();
-  for (const person of state.people) {
-    if (!person) continue;
+  const shown = [];
+  state.people.forEach((person, i) => {
+    if (!person) return;
     for (const o of state.overlays) {
       const a = person[o.anchor];
-      if (a) drawOverlay(o, a, now);
+      if (!a) continue;
+      if (!o.trig) { drawOverlay(o, a, now); continue; }
+      // on a trigger: only for the person doing the pose, faded in/out, animation from the start
+      const s = triggers.showing(o.trig, i, now, o.held, o.dur);
+      if (s) { drawOverlay(o, { ...a, vis: Math.max(a.vis, 0.7) }, s.since, s.alpha); shown.push(o.name); }
     }
-  }
-  triggers.draw(i => state.people[i], now);
+  });
   if (state.showAnchors) drawAnchorPoints();
+  state.shownOnTrigger = shown; // (for the tests)
 }
 
 // ---------------------------------------------------------------- snapshot + recording
@@ -960,6 +1063,14 @@ $('#urlForm').onsubmit = async e => {
 };
 $('#copyLinkBtn').onclick = copyLink;
 buildPackButtons();
+for (const fx of EFFECTS) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'btn small';
+  b.textContent = fx.label;
+  b.setAttribute('aria-label', `Add the ${fx.label} effect`);
+  b.onclick = () => addOverlay({ src: new URL(fx.file, SITE).href, settings: { ...fx.settings } });
+  $('#effectList').append(b);
+}
 $('#qrBtn').onclick = showQr;
 $('#savePackBtn').onclick = savePackFile;
 triggers.wire(() => { const lm = state.result?.landmarks?.[0]; return lm && state.stream ? { lm, vw: cam.videoWidth, vh: cam.videoHeight } : null; });
@@ -1029,3 +1140,4 @@ loadModel();
 loadFromLink();
 requestAnimationFrame(frame);
 window.__appReady = true;
+window.__ar = { state, triggers }; // for the tests in dev/tests

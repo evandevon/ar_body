@@ -1,5 +1,11 @@
 # Changelog
 
+## v18
+- **Overlays and triggers are split up.** Every overlay now has **When to show?**: *All the time*, or when a pose is done. If it's on a pose, choose **for a set time** or **as long as the pose is held**. All the overlays (and their size, place and settings) now live in one list in the settings.
+- The **pose triggers** window now only sets up the poses: pick a ready-made pose or capture your own, then set *close enough* and *hold time*. Each trigger lists the overlays it shows. One pose can now show several overlays at once.
+- **+ New pose trigger…** in an overlay's *When to show?* list makes a new pose and links it to that overlay in one go.
+- New **Effects** buttons (*Energy ball*, *Star burst*) under the address box add those effects as overlays.
+- Links and packs from before v18 still work: each old trigger's picture becomes an overlay linked to that pose. The *Energy poses* pack has been updated to the new layout.
 ## v17
 - No changes to how anything works. Added header comments to the main scripts and stylesheets, for developers.
 

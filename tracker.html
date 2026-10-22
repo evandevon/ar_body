@@ -6,11 +6,11 @@
   <title>AR Body Tracker</title>
   <meta name="description" content="Track a body with your camera and stick pictures and videos to it. Runs entirely in your browser — nothing is uploaded.">
   <meta name="theme-color" content="#101418">
-  <meta name="version" content="v17">
+  <meta name="version" content="v18">
   <script src="js/core/failsafe.js?v=5d27624d"></script>
   <link rel="icon" href="assets/sparkle.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/progress.css?v=c68c0312">
-  <link rel="stylesheet" href="css/style.css?v=f0b525f0">
+  <link rel="stylesheet" href="css/style.css?v=adc45869">
 </head>
 <body>
   <main class="app">
@@ -68,6 +68,10 @@
           <input id="urlInput" type="url" placeholder="https://… picture or video address" inputmode="url" autocomplete="off" required>
           <button class="btn primary" type="submit">Add</button>
         </form>
+        <div class="examples">
+          <span>Effects:</span>
+          <span id="effectList" class="pack-list"></span>
+        </div>
         <p class="fine">Use addresses that go straight to the file (ending in .png, .gif, .svg, .mp4, .webm…). You can also drag a picture in from another tab, or paste an address anywhere on the page. Files stored in your GitHub repo work best.</p>
 
         <p id="emptyMsg" class="empty">No overlays yet.</p>
@@ -88,8 +92,8 @@
 
       <section class="group">
         <h2>Pose triggers</h2>
-        <p class="fine">Show a picture, GIF or video when someone strikes a pose — hands together for an energy ball, both hands up for a burst of stars. Choose a ready-made pose or capture your own.</p>
-        <button class="btn" id="trigBtn" type="button" aria-controls="trigWin" aria-expanded="false">Pose triggers<span id="trigCount"></span>…</button>
+        <p class="fine">Set up poses to watch for — hands together, both hands up, or capture your own. Then, in any overlay, choose the pose under <b>When to show?</b> to make it appear only when the pose is done.</p>
+        <button class="btn" id="trigBtn" type="button" aria-controls="trigWin" aria-expanded="false">Set up pose triggers<span id="trigCount"></span>…</button>
       </section>
 
       <section class="group">
@@ -134,7 +138,8 @@
       <button class="icon-btn" id="trigWinClose" type="button" aria-label="Close pose triggers">✕</button>
     </header>
     <div id="trigListWrap">
-      <p class="fine">Each bar shows how closely the pose matches right now. The line marks “close enough” — when the bar passes it, the trigger fires.</p>
+      <p class="fine">A trigger is a pose to watch for. Each bar shows how closely the pose matches right now; the line marks “close enough” — when the bar passes it, the trigger fires.</p>
+      <p class="fine">To choose what appears, open an overlay in the settings and pick the pose under <b>When to show?</b></p>
       <p class="empty" id="trigEmpty">No triggers yet.</p>
       <ul class="trig-list" id="trigList" aria-label="Pose triggers"></ul>
       <button class="btn primary wide" id="trigAdd" type="button">+ New trigger</button>
@@ -142,7 +147,8 @@
 
     <form id="trigForm" hidden onsubmit="return false">
       <h3 id="tfTitle">New trigger</h3>
-      <label class="row"><span>Name</span><input id="tfName" type="text" maxlength="40" placeholder="e.g. Energy ball"></label>
+      <p class="fine" id="tfFromOverlay" hidden>When you save, your overlay will show when this pose is done.</p>
+      <label class="row"><span>Name</span><input id="tfName" type="text" maxlength="40" placeholder="e.g. Power up"></label>
       <label class="row"><span>Pose</span><select id="tfPose"></select></label>
       <div id="tfCustom" class="custom-pose" hidden>
         <p class="fine" id="tfCaptured"></p>
@@ -162,24 +168,6 @@
       <div class="row slider">
         <label for="tfHold">Hold the pose for</label><output id="tfHoldOut"></output>
         <input type="range" id="tfHold" min="0" max="2" step="0.1" value="0.3">
-      </div>
-      <h3>Then show</h3>
-      <label class="row"><span>What</span><select id="tfShow"></select></label>
-      <label class="row" id="tfUrlRow" hidden><span>Address</span><input id="tfUrl" type="url" inputmode="url" placeholder="https://… .gif, .png, .mp4"></label>
-      <label class="row"><span>Where</span><select id="tfPlace"></select></label>
-      <div class="row slider">
-        <label for="tfSize">Size</label><output id="tfSizeOut"></output>
-        <input type="range" id="tfSize" min="0.2" max="4" step="0.1" value="1">
-      </div>
-      <label class="row"><span>For</span>
-        <select id="tfMode">
-          <option value="time">a set time</option>
-          <option value="while">as long as the pose is held</option>
-        </select>
-      </label>
-      <div class="row slider" id="tfDurRow">
-        <label for="tfDur">How long</label><output id="tfDurOut"></output>
-        <input type="range" id="tfDur" min="0.5" max="10" step="0.5" value="2">
       </div>
       <div class="btn-row">
         <button class="btn" id="tfCancel" type="button">Cancel</button>
@@ -203,6 +191,6 @@
     </div>
   </div>
 
-  <script type="module" src="js/app.js?v=5f6987e3"></script>
+  <script type="module" src="js/app.js?v=be475faf"></script>
 </body>
 </html>
